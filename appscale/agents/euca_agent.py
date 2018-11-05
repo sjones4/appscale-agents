@@ -1,6 +1,6 @@
 import boto
 
-from appscale.tools.appscale_logger import AppScaleLogger
+from appscale_logger import AppScaleLogger
 from ec2_agent import EC2Agent
 from urlparse import urlparse
 

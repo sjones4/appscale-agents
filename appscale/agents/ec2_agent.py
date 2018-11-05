@@ -13,8 +13,8 @@ from boto.ec2.networkinterface import NetworkInterfaceCollection
 from boto.ec2.networkinterface import NetworkInterfaceSpecification
 from boto.exception import EC2ResponseError
 
-from appscale.tools.appscale_logger import AppScaleLogger
-from appscale.tools.local_state import LocalState
+from config import AppScaleState
+from appscale_logger import AppScaleLogger
 from base_agent import AgentConfigurationException
 from base_agent import AgentRuntimeException
 from base_agent import BaseAgent
@@ -163,9 +163,10 @@ class EC2Agent(BaseAgent):
 
     AppScaleLogger.log("Creating key pair: {0}".format(keyname))
     key_pair = conn.create_key_pair(keyname)
-    ssh_key = '{0}{1}.key'.format(LocalState.LOCAL_APPSCALE_PATH, keyname)
-    LocalState.write_key_file(ssh_key, key_pair.material)
 
+    ssh_key_location = AppScaleState.ssh_key(keyname)
+    AppScaleState.write_key_file(ssh_key_location, key_pari.material)
+    
     sg = self.create_security_group(parameters, group)
 
     self.authorize_security_group(parameters, sg.id, from_port=1,
@@ -386,11 +387,11 @@ class EC2Agent(BaseAgent):
     """
     params = {
       self.PARAM_CREDENTIALS : {},
-      self.PARAM_GROUP : LocalState.get_group(keyname),
+      self.PARAM_GROUP : AppScaleState.get_group(keyname),
       self.PARAM_KEYNAME : keyname
     }
 
-    zone = LocalState.get_zone(keyname)
+    zone = AppScaleState.get_zone(keyname)
     if zone:
       params[self.PARAM_REGION] = zone[:-1]
     else:

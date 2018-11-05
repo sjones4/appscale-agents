@@ -72,8 +72,9 @@ from msrestazure.azure_exceptions import CloudError
 from haikunator import Haikunator
 
 # AppScale-specific imports
-from appscale.tools.appscale_logger import AppScaleLogger
-from appscale.tools.local_state import LocalState
+from config import AppScaleState
+from appscale_logger import AppScaleLogger
+
 from base_agent import AgentConfigurationException
 from base_agent import AgentRuntimeException
 from base_agent import BaseAgent
@@ -221,14 +222,15 @@ class AzureAgent(BaseAgent):
 
     AppScaleLogger.log("Verifying that SSH key exists locally.")
     keyname = parameters[self.PARAM_KEYNAME]
-    private_key = LocalState.LOCAL_APPSCALE_PATH + keyname
-    public_key = private_key + ".pub"
 
+    private_key = AppScaleState.private_key(keyname)
+    public_key = AppScaleState.public_key(keyname)
+    
     if os.path.exists(private_key) or os.path.exists(public_key):
       raise AgentRuntimeException("SSH key already found locally - please "
                                   "use a different keyname.")
 
-    LocalState.generate_rsa_key(keyname, parameters[self.PARAM_VERBOSE])
+    AppScaleState.generate_rsa_key(keyname, parameters[self.PARAM_VERBOSE])
 
     AppScaleLogger.log("Configuring network for machine/s under "
                        "resource group '{0}' with storage account '{1}' "
@@ -672,8 +674,8 @@ class AzureAgent(BaseAgent):
     """
     is_autoscale = parameters[self.PARAM_AUTOSCALE_AGENT]
     keyname = parameters[self.PARAM_KEYNAME]
-    private_key_path = LocalState.LOCAL_APPSCALE_PATH + keyname
-    public_key_path = private_key_path + ".pub"
+    private_key_path = AppScaleState.private_key(keyname)
+    public_key_path = AppScaleState.public_key(keyname)
     auth_keys_path = "/home/{}/.ssh/authorized_keys".format(self.ADMIN_USERNAME)
 
     if is_autoscale in ['True', True]:
@@ -1610,16 +1612,16 @@ class AzureAgent(BaseAgent):
         Microsoft Azure.
     """
     params = {
-      self.PARAM_GROUP: LocalState.get_group(keyname),
+      self.PARAM_GROUP: AppScaleState.get_group(keyname),
       self.PARAM_KEYNAME: keyname,
       self.PARAM_VERBOSE: True,
-      self.PARAM_ZONE: LocalState.get_zone(keyname),
-      self.PARAM_SUBSCRIBER_ID: LocalState.get_subscription_id(keyname),
-      self.PARAM_APP_ID: LocalState.get_app_id(keyname),
-      self.PARAM_APP_SECRET: LocalState.get_app_secret_key(keyname),
-      self.PARAM_TENANT_ID: LocalState.get_tenant_id(keyname),
-      self.PARAM_RESOURCE_GROUP: LocalState.get_resource_group(keyname),
-      self.PARAM_STORAGE_ACCOUNT: LocalState.get_storage_account(keyname),
+      self.PARAM_ZONE: AppScaleState.get_zone(keyname),
+      self.PARAM_SUBSCRIBER_ID: AppScaleState.get_subscription_id(keyname),
+      self.PARAM_APP_ID: AppScaleState.get_app_id(keyname),
+      self.PARAM_APP_SECRET: AppScaleStatee.get_app_secret_key(keyname),
+      self.PARAM_TENANT_ID: AppScaleState.get_tenant_id(keyname),
+      self.PARAM_RESOURCE_GROUP: AppScaleState.get_resource_group(keyname),
+      self.PARAM_STORAGE_ACCOUNT: AppScaleState.get_storage_account(keyname),
     }
     return params
 
