@@ -52,7 +52,7 @@ class TestAppScaleState(TestCase):
                 "login"
             ],
             "private_ip": "10.240.0.2",
-            "public_ip": "35.232.41.161",
+            "public_ip": "172.16.10.10",
             "ssh_key": "/etc/appscale/keys/cloud1/appscale3cc1f78769994c6ab909d278ff18d0e3.key"
         }
     ]
@@ -79,7 +79,7 @@ class TestAppScaleState(TestCase):
                 "login"
             ],
             "private_ip": "10.240.0.2",
-            "public_ip": "35.232.41.161",
+            "public_ip": "172.168.10.11",
             "ssh_key": "/etc/appscale/keys/cloud1/appscale3cc1f78769994c6ab909d278ff18d0e3.key"
         }
     ]
