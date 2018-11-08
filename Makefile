@@ -1,7 +1,7 @@
 #
-# Makefile is mainly used to perform a version bump on the software.
+# 
 #
-.PHONY: test all check-venv
+.PHONY: test all
 
 help:
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "\033[36m%-10s\033[0m - %s\n", $$1, $$2} /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) }' $(MAKEFILE_LIST)
@@ -26,7 +26,6 @@ install-no-venv: ## Install via pip without ensuring a virtualenv
 
 build: checkenv-VIRTUAL_ENV ## Build distro for pypi upload
 	@python setup.py sdist bdist_wheel
-
 
 clean: ## Clean build directories
 	rm -rf build
