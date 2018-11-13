@@ -165,7 +165,7 @@ class EC2Agent(BaseAgent):
     key_pair = conn.create_key_pair(keyname)
 
     ssh_key_location = AppScaleState.ssh_key(keyname)
-    AppScaleState.write_key_file(ssh_key_location, key_pari.material)
+    AppScaleState.write_key_file(ssh_key_location, key_pair.material)
     
     sg = self.create_security_group(parameters, group)
 
