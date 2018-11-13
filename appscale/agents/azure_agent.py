@@ -72,7 +72,7 @@ from msrestazure.azure_exceptions import CloudError
 from haikunator import Haikunator
 
 # AppScale-specific imports
-from config import AppScaleState
+from .config import AppScaleState
 from appscale_logger import AppScaleLogger
 
 from base_agent import AgentConfigurationException

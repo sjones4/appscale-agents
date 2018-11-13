@@ -13,7 +13,7 @@ from boto.ec2.networkinterface import NetworkInterfaceCollection
 from boto.ec2.networkinterface import NetworkInterfaceSpecification
 from boto.exception import EC2ResponseError
 
-from config import AppScaleState
+from .config import AppScaleState
 from appscale_logger import AppScaleLogger
 from base_agent import AgentConfigurationException
 from base_agent import AgentRuntimeException

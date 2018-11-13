@@ -28,7 +28,7 @@ import oauth2client.tools
 
 
 # AppScale-specific imports
-from config import AppScaleState
+from .config import AppScaleState
 
 from appscale_logger import AppScaleLogger
 
