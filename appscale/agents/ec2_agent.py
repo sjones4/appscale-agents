@@ -399,7 +399,7 @@ class EC2Agent(BaseAgent):
 
 
     for credential in self.REQUIRED_CREDENTIALS:
-      cred = LocalState.get_infrastructure_option(tag=credential,
+      cred = AppScaleState.get_infrastructure_option(tag=credential,
                                                   keyname=keyname)
       if not cred:
         raise AgentConfigurationException("no " + credential)
