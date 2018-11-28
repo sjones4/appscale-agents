@@ -17,7 +17,8 @@ test: checkenv-VIRTUAL_ENV ## Run Python Unit tests
 ##@ Installation
 
 venv: ## Create virtualenv environment
-	virtualenv venv
+	virtualenv $@
+	@echo "\nVirtualenv created\nexecute the following to activate: $$ source $@/bin/activate\n"
 
 install: checkenv-VIRTUAL_ENV ## Install via pip, ensuring a virtualenv
 	@pip install .
@@ -34,6 +35,7 @@ clean: ## Clean build directories
 	rm -rf build
 	rm -rf dist
 	rm -rf appscale_agents.egg-info
+	rm -rf venv
 
 upload: checkenv-VIRTUAL_ENV ## Upload distribution to pypi
 	@pip install --user --upgrade twine
