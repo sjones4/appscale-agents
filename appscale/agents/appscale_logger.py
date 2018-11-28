@@ -32,7 +32,7 @@ class AppScaleLogger():
         Args:
         message: A str representing the message to log.
         """
-        print message
+        print(message)
 
 
     @classmethod
