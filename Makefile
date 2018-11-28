@@ -1,7 +1,7 @@
 #
 # 
 #
-.PHONY: test all
+.PHONY: test all venv
 
 help:
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "\033[36m%-10s\033[0m - %s\n", $$1, $$2} /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) }' $(MAKEFILE_LIST)
@@ -15,6 +15,9 @@ test: checkenv-VIRTUAL_ENV ## Run Python Unit tests
 	@python -m unittest discover -b -v -s test
 
 ##@ Installation
+
+venv: ## Create virtualenv environment
+	virtualenv venv
 
 install: checkenv-VIRTUAL_ENV ## Install via pip, ensuring a virtualenv
 	@pip install .
