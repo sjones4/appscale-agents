@@ -249,7 +249,12 @@ class BaseAgent(object):
     Returns:
       A list of elements unique to list1
     """
-    return list(set(list1).difference(set(list2)))
+    diffed_list = []
+    list2 = set(list2)
+    for item in list1:
+      if item not in list2:
+        diffed_list.append(item)
+    return diffed_list
 
 
 class AgentConfigurationException(Exception):
