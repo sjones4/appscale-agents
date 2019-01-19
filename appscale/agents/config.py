@@ -2,6 +2,7 @@
 import os
 import time
 import shutil
+import logging
 import subprocess
 import tempfile
 
@@ -9,8 +10,8 @@ import yaml
 import json
 
 from agent_exceptions import ShellException, BadConfigurationException
-from appscale_logger import AppScaleLogger
 
+logger = logging.getLogger(__name__)
 
 class AppScaleState(object):
     DEFAULT_NUM_RETRIES = 5
@@ -350,21 +351,21 @@ class AppScaleState(object):
         tries_left = num_retries
         try:
             while tries_left:
-                AppScaleLogger.verbose("shell> {0}".format(command), is_verbose)
+                logger.debug("shell> {0}".format(command))
                 the_temp_file = tempfile.NamedTemporaryFile()
                 if stdin is not None:
                     stdin_strio = tempfile.TemporaryFile()
                     stdin_strio.write(stdin)
                     stdin_strio.seek(0)
-                    AppScaleLogger.verbose("       stdin str: {0}"
-                                           .format(stdin), is_verbose)
+                    logger.debug("       stdin str: {0}"
+                                           .format(stdin))
                     result = subprocess.Popen(command, shell=True, stdout=the_temp_file,
                                               stdin=stdin_strio, stderr=subprocess.STDOUT)
                 else:
                     result = subprocess.Popen(command, shell=True, stdout=the_temp_file,
                                               stderr=subprocess.STDOUT)
-                AppScaleLogger.verbose("       stdout buffer: {0}"
-                                       .format(the_temp_file.name), is_verbose)
+                logger.debug("       stdout buffer: {0}"
+                                       .format(the_temp_file.name))
                 result.wait()
                 if stdin is not None:
                     stdin_strio.close()
@@ -376,8 +377,8 @@ class AppScaleState(object):
                 tries_left -= 1
                 if tries_left:
                     the_temp_file.close()
-                    AppScaleLogger.verbose("Command failed. Trying again momentarily."
-                                           .format(command), is_verbose)
+                    logger.debug("Command failed. Trying again momentarily."
+                                           .format(command))
                 else:
                     the_temp_file.seek(0)
                     output = the_temp_file.read()

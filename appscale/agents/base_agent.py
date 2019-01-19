@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 
+import logging
+
+logger = logging.getLogger(__name__)
 
 class BaseAgent(object):
   """BaseAgent class defines the interface that must be implemented by
@@ -256,6 +259,15 @@ class BaseAgent(object):
         diffed_list.append(item)
     return diffed_list
 
+  def __test_logging(self):
+    """ Output a couple of messages at different logging levels"""
+    print "LOGGER: %s" % logger.name
+    logger.info("baseagent info log")
+    logger.debug("baseagent debug log")
+    logger.warn("baseagent warning log")
+    logger.error("baseagent error log")
+    logger.critical("baseagent critical log")
+    
 
 class AgentConfigurationException(Exception):
   """An agent implementation may throw this exception when it detects that a
