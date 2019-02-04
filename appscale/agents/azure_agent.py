@@ -1610,7 +1610,7 @@ class AzureAgent(BaseAgent):
       self.PARAM_ZONE: AppScaleState.get_zone(keyname),
       self.PARAM_SUBSCRIBER_ID: AppScaleState.get_subscription_id(keyname),
       self.PARAM_APP_ID: AppScaleState.get_app_id(keyname),
-      self.PARAM_APP_SECRET: AppScaleStatee.get_app_secret_key(keyname),
+      self.PARAM_APP_SECRET: AppScaleState.get_app_secret_key(keyname),
       self.PARAM_TENANT_ID: AppScaleState.get_tenant_id(keyname),
       self.PARAM_RESOURCE_GROUP: AppScaleState.get_resource_group(keyname),
       self.PARAM_STORAGE_ACCOUNT: AppScaleState.get_storage_account(keyname),

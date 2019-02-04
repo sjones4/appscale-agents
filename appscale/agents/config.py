@@ -46,15 +46,15 @@ class AppScaleState(object):
 
     @classmethod
     def get_client_secrets_location(cls, keyname):
-        """Returns the path on the local filesystem where the client secrets JSON
-        file (used to interact with Google Compute Engine) can be found.
-        
+        """Returns the path on the local filesystem where the GCE
+           client secrets JSON file can be found.
+
         Args:
-        keyname: A str representing the SSH keypair name used for this AppScale
-        deployment.
+          keyname: A str representing the SSH keypair name used for
+                   this AppScale deployment.
         Returns:
-        A str that corresponds to a location on the local filesystem where the
-        client secrets file can be found.
+          A str that corresponds to a location on the local filesystem where the
+          client secrets file can be found.
         """
         return os.path.join(cls.config_path(), "{0}-secrets.json".format(keyname))
 
@@ -64,13 +64,13 @@ class AppScaleState(object):
 
     @classmethod
     def locations_json_location(cls, keyname):
-        """Determines the location where the JSON file can be found that contains
-        information related to service placement (e.g., where machines can be found
-        and what services they run).
+        """Determines the location where the JSON file can be found that
+        contains information related to service placement.
+        (e.g., where machines can be found and what services they run).
 
         Args:
           keyname: A str that indicates the name of the SSH keypair that
-            uniquely identifies this AppScale deployment.
+                   uniquely identifies this AppScale deployment.
         Returns:
           A str that indicates where the locations.json file can be found.
         """
@@ -86,10 +86,10 @@ class AppScaleState(object):
         local filesystem.
         
         Args:
-        keyname: The SSH keypair name that uniquely identifies this AppScale
-        deployment.
-        is_verbose: A bool that indicates if we should print the ssh-keygen
-        command to stdout.
+          keyname: The SSH keypair name that uniquely identifies this AppScale
+                   deployment.
+          is_verbose: A bool that indicates if we should print the ssh-keygen
+                      command to stdout.
         """
 
         private_key = cls.private_key(keyname)
@@ -251,11 +251,11 @@ class AppScaleState(object):
         'infrastructure_info'.
         
         Args:
-        keyname: A str that indicates the name of the SSH keypair that
-        uniquely identifies this AppScale deployment.
-        tag: A str that indicates what we should look for in the
-        infrastructure_info dictionary, this tag retrieves an option that was
-        passed to AppScale at runtime.
+          keyname: A str that indicates the name of the SSH keypair that
+                   uniquely identifies this AppScale deployment.
+          tag: A str that indicates what we should look for in the
+               infrastructure_info dictionary, this tag retrieves
+               an option that was passed to AppScale at runtime.
         """
         try:
             with open(cls.locations_json_location(keyname), 'r') as file_handle:
@@ -331,22 +331,23 @@ class AppScaleState(object):
     @classmethod
     def shell(cls, command, is_verbose, num_retries=DEFAULT_NUM_RETRIES,
               stdin=None):
-        """Executes a command on this machine, retrying it up to five times if it
-        initially fails.
+        """Executes a command on this machine, retrying it up to five times if
+           it initially fails.
         
         Args:
-        command: A str representing the command to execute.
-        is_verbose: A bool that indicates if we should print the command we are
+          command: A str representing the command to execute.
+          is_verbose: A bool that indicates if we should print the command
+                      we are
         executing to stdout.
-        num_retries: The number of times we should try to execute the given
-        command before aborting.
-        stdin: A str that is passes as standard input to the process
+          num_retries: The number of times we should try to execute the given
+                       command before aborting.
+          stdin: A str that is passes as standard input to the process
         Returns:
-        A str with both the standard output and standard error produced when the
-        command executes.
+          A str with both the standard output and standard error produced
+          when the command executes.
         Raises:
-        ShellException: If, after five attempts, executing the named command
-        failed.
+          ShellException: If, after five attempts, executing the named command
+          failed.
         """
         tries_left = num_retries
         try:
