@@ -1,2 +1,3 @@
-__author__ = 'hiranya'
-__email__ = 'hiranya@appscale.com'
+
+import logging
+logging.getLogger(__name__).addHandler(logging.NullHandler())

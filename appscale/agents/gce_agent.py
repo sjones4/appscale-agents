@@ -7,6 +7,7 @@ interact with Google Compute Engine.
 # General-purpose Python library imports
 import datetime
 import json
+import logging
 import os.path
 import pwd
 import shutil
@@ -28,12 +29,13 @@ import oauth2client.tools
 
 
 # AppScale-specific imports
-from appscale.tools.appscale_logger import AppScaleLogger
-from appscale.tools.local_state import LocalState
+from .config import AppScaleState
+
 from base_agent import AgentConfigurationException
 from base_agent import AgentRuntimeException
 from base_agent import BaseAgent
 
+logger = logging.getLogger(__name__)
 
 class CredentialJSONKeys(object):
   """ A class containing valid JSON keys in credential files. """
@@ -148,7 +150,7 @@ class GCEAgent(BaseAgent):
       request = gce_service.instances().list(project=parameters
         [self.PARAM_PROJECT], zone=parameters[self.PARAM_ZONE])
       response = request.execute(http=auth_http)
-      AppScaleLogger.verbose(str(response), parameters[self.PARAM_VERBOSE])
+      logger.debug(str(response))
       return True
     except errors.HttpError as e:
       error_message = json.loads(e.content)['error']['message']
@@ -181,16 +183,16 @@ class GCEAgent(BaseAgent):
     if is_autoscale_agent:
       return
 
-    AppScaleLogger.log("Verifying that SSH key exists locally")
+    logger.info("Verifying that SSH key exists locally")
     keyname = parameters[self.PARAM_KEYNAME]
-    private_key = LocalState.LOCAL_APPSCALE_PATH + keyname
-    public_key = private_key + ".pub"
+    private_key = AppScaleState.private_key(keyname)
+    public_key = AppScaleState.public_key(keyname)
 
     if os.path.exists(private_key) or os.path.exists(public_key):
       raise AgentRuntimeException("SSH key already found locally - please " +
         "use a different keyname")
 
-    LocalState.generate_rsa_key(keyname, parameters[self.PARAM_VERBOSE])
+    AppScaleState.generate_rsa_key(keyname, parameters[self.PARAM_VERBOSE])
 
     ssh_key_exists, all_ssh_keys = self.does_ssh_key_exist(parameters)
     if not ssh_key_exists:
@@ -221,8 +223,8 @@ class GCEAgent(BaseAgent):
         the second item is the contents of all SSH keys stored in GCE.
     """
     our_public_ssh_key = None
-    public_ssh_key_location = LocalState.LOCAL_APPSCALE_PATH + \
-      parameters[self.PARAM_KEYNAME] + ".pub"
+    public_ssh_key_location = AppScaleState.public_key(parameters[self.PARAM_KEYNAME])
+
     with open(public_ssh_key_location) as file_handle:
       system_user = os.getenv('LOGNAME', default=pwd.getpwuid(os.getuid())[0])
       our_public_ssh_key = system_user + ":" + file_handle.read().rstrip()
@@ -234,7 +236,7 @@ class GCEAgent(BaseAgent):
       request = gce_service.projects().get(
         project=parameters[self.PARAM_PROJECT])
       response = request.execute(http=auth_http)
-      AppScaleLogger.verbose(str(response), parameters[self.PARAM_VERBOSE])
+      logger.debug(str(response))
 
       if not 'items' in response['commonInstanceMetadata']:
         return False, ""
@@ -277,7 +279,7 @@ class GCEAgent(BaseAgent):
         project=parameters[self.PARAM_PROJECT],
         network=parameters[self.PARAM_GROUP])
       response = request.execute(http=auth_http)
-      AppScaleLogger.verbose(str(response), parameters[self.PARAM_VERBOSE])
+      logger.debug(str(response))
       return True
     except errors.HttpError:
       return False
@@ -301,7 +303,7 @@ class GCEAgent(BaseAgent):
         project=parameters[self.PARAM_PROJECT],
         firewall=parameters[self.PARAM_GROUP])
       response = request.execute(http=auth_http)
-      AppScaleLogger.verbose(str(response), parameters[self.PARAM_VERBOSE])
+      logger.debug(str(response))
       return True
     except errors.HttpError:
       return False
@@ -317,8 +319,8 @@ class GCEAgent(BaseAgent):
       all_ssh_keys: A str that contains all of the SSH keys that are
         currently passed in to GCE instances.
     """
-    public_ssh_key_location = LocalState.LOCAL_APPSCALE_PATH + \
-      parameters[self.PARAM_KEYNAME] + ".pub"
+    keyname = parameters[self.PARAM_KEYNAME]
+    public_ssh_key_location = AppScaleState.public_key(keyname)
     with open(public_ssh_key_location) as file_handle:
       system_user = os.getenv('LOGNAME', default=pwd.getpwuid(os.getuid())[0])
       public_ssh_key = file_handle.read().rstrip()
@@ -344,7 +346,7 @@ class GCEAgent(BaseAgent):
       }
     )
     response = request.execute(http=auth_http)
-    AppScaleLogger.verbose(str(response), parameters[self.PARAM_VERBOSE])
+    logger.debug(str(response))
     self.ensure_operation_succeeds(gce_service, auth_http, response,
       parameters[self.PARAM_PROJECT])
 
@@ -372,7 +374,7 @@ class GCEAgent(BaseAgent):
       }
     )
     response = request.execute(http=auth_http)
-    AppScaleLogger.verbose(str(response), parameters[self.PARAM_VERBOSE])
+    logger.debug(str(response))
     self.ensure_operation_succeeds(gce_service, auth_http, response,
       parameters[self.PARAM_PROJECT])
     return response['targetLink']
@@ -398,7 +400,7 @@ class GCEAgent(BaseAgent):
       network=parameters[self.PARAM_GROUP]
     )
     response = request.execute(http=auth_http)
-    AppScaleLogger.verbose(str(response), parameters[self.PARAM_VERBOSE])
+    logger.debug(str(response))
     self.ensure_operation_succeeds(gce_service, auth_http, response,
       parameters[self.PARAM_PROJECT])
 
@@ -431,7 +433,7 @@ class GCEAgent(BaseAgent):
       }
     )
     response = request.execute(http=auth_http)
-    AppScaleLogger.verbose(str(response), parameters[self.PARAM_VERBOSE])
+    logger.debug(str(response))
     self.ensure_operation_succeeds(gce_service, auth_http, response,
       parameters[self.PARAM_PROJECT])
 
@@ -455,7 +457,7 @@ class GCEAgent(BaseAgent):
       firewall=parameters[self.PARAM_GROUP]
     )
     response = request.execute(http=auth_http)
-    AppScaleLogger.verbose(str(response), parameters[self.PARAM_VERBOSE])
+    logger.debug(str(response))
     self.ensure_operation_succeeds(gce_service, auth_http, response,
       parameters[self.PARAM_PROJECT])
 
@@ -489,8 +491,7 @@ class GCEAgent(BaseAgent):
         "at {0}".format(full_credentials))
 
     if args.get('client_secrets'):
-      destination = LocalState.get_client_secrets_location(args['keyname'])
-
+      destination = AppScaleState.get_client_secrets_location(args['keyname'])
       # Make sure the destination's parent directory exists.
       destination_par = os.path.abspath(os.path.join(destination, os.pardir))
       if not os.path.exists(destination_par):
@@ -498,8 +499,7 @@ class GCEAgent(BaseAgent):
 
       shutil.copy(full_credentials, destination)
     elif args.get('oauth2_storage'):
-      destination = LocalState.get_oauth2_storage_location(args['keyname'])
-
+      destination = AppScaleState.get_oauth2_storage_location(args['keyname'])
       # Make sure the destination's parent directory exists.
       destination_par = os.path.abspath(os.path.join(destination, os.pardir))
       if not os.path.exists(destination_par):
@@ -553,19 +553,19 @@ class GCEAgent(BaseAgent):
         Google Compute Engine.
     """
     params = {
-      self.PARAM_GROUP : LocalState.get_group(keyname),
+      self.PARAM_GROUP : AppScaleState.get_group(keyname),
       self.PARAM_KEYNAME : keyname,
-      self.PARAM_PROJECT : LocalState.get_project(keyname),
+      self.PARAM_PROJECT : AppScaleState.get_project(keyname),
       self.PARAM_VERBOSE : False,  # TODO(cgb): Don't put False in here.
-      self.PARAM_ZONE : LocalState.get_zone(keyname)
+      self.PARAM_ZONE : AppScaleState.get_zone(keyname)
     }
 
-    if os.path.exists(LocalState.get_client_secrets_location(keyname)):
+    if os.path.exists(AppScaleState.get_client_secrets_location(keyname)):
       params[self.PARAM_SECRETS] = \
-        LocalState.get_client_secrets_location(keyname)
+        AppScaleState.get_client_secrets_location(keyname)
     else:
       params[self.PARAM_STORAGE] = \
-        LocalState.get_oauth2_storage_location(keyname)
+        AppScaleState.get_oauth2_storage_location(keyname)
 
     return params
 
@@ -638,7 +638,7 @@ class GCEAgent(BaseAgent):
       zone=parameters[self.PARAM_ZONE]
     )
     response = request.execute(http=auth_http)
-    AppScaleLogger.verbose(str(response), parameters[self.PARAM_VERBOSE])
+    logger.debug(str(response))
 
     instance_ids = []
     public_ips = []
@@ -697,7 +697,7 @@ class GCEAgent(BaseAgent):
       sourceImage=source_image_url
     )
     response = request.execute(http=auth_http)
-    AppScaleLogger.verbose(str(response), parameters[self.PARAM_VERBOSE])
+    logger.debug(str(response))
     self.ensure_operation_succeeds(gce_service, auth_http, response,
       parameters[self.PARAM_PROJECT])
 
@@ -727,7 +727,7 @@ class GCEAgent(BaseAgent):
     group = parameters[self.PARAM_GROUP]
     zone = parameters[self.PARAM_ZONE]
 
-    AppScaleLogger.log("Starting {0} machines with machine id {1}, with " \
+    logger.info("Starting {0} machines with machine id {1}, with " \
       "instance type {2}, keyname {3}, in security group {4}, in zone {5}" \
       .format(count, image_id, instance_type, keyname, group, zone))
 
@@ -778,7 +778,7 @@ class GCEAgent(BaseAgent):
       request = gce_service.instances().insert(
            project=project_id, body=instances, zone=zone)
       response = request.execute(http=auth_http)
-      AppScaleLogger.verbose(str(response), parameters[self.PARAM_VERBOSE])
+      logger.debug(str(response))
       self.ensure_operation_succeeds(gce_service, auth_http, response,
         parameters[self.PARAM_PROJECT])
 
@@ -790,7 +790,7 @@ class GCEAgent(BaseAgent):
     now = datetime.datetime.now()
 
     while now < end_time:
-      AppScaleLogger.log("Waiting for your instances to start...")
+      logger.info("Waiting for your instances to start...")
       instance_info = self.describe_instances(parameters)
       public_ips = instance_info[0]
       private_ips = instance_info[1]
@@ -811,13 +811,13 @@ class GCEAgent(BaseAgent):
       for index in range(0, len(public_ips)):
         if public_ips[index] == '0.0.0.0':
           instance_to_term = instance_ids[index]
-          AppScaleLogger.log('Instance {0} failed to get a public IP address'\
+          logger.info('Instance {0} failed to get a public IP address'\
                   'and is being terminated'.format(instance_to_term))
           self.terminate_instances([instance_to_term])
 
     end_time = datetime.datetime.now()
     total_time = end_time - start_time
-    AppScaleLogger.log("Started {0} on-demand instances in {1} seconds" \
+    logger.info("Started {0} on-demand instances in {1} seconds" \
       .format(count, total_time.seconds))
     return instance_ids, public_ips, private_ips
 
@@ -863,7 +863,7 @@ class GCEAgent(BaseAgent):
       zone=parameters[self.PARAM_ZONE]
     )
     response = request.execute(http=auth_http)
-    AppScaleLogger.verbose(str(response), parameters[self.PARAM_VERBOSE])
+    logger.debug(str(response))
 
 
   def add_access_config(self, parameters, instance_id, static_ip):
@@ -899,7 +899,7 @@ class GCEAgent(BaseAgent):
       }
     )
     response = request.execute(http=auth_http)
-    AppScaleLogger.verbose(str(response), parameters[self.PARAM_VERBOSE])
+    logger.debug(str(response))
 
 
   def terminate_instances(self, parameters):
@@ -923,7 +923,7 @@ class GCEAgent(BaseAgent):
         instance=instance_id
       )
       response = request.execute(http=auth_http)
-      AppScaleLogger.verbose(str(response), parameters[self.PARAM_VERBOSE])
+      logger.debug(str(response))
       responses.append(response)
 
     for response in responses:
@@ -954,7 +954,7 @@ class GCEAgent(BaseAgent):
       region=parameters[self.PARAM_REGION]
     )
     response = request.execute(http=auth_http)
-    AppScaleLogger.verbose(str(response), parameters[self.PARAM_VERBOSE])
+    logger.debug(str(response))
 
     if 'items' in response:
       return True
@@ -980,7 +980,7 @@ class GCEAgent(BaseAgent):
       request = gce_service.images().get(project=parameters[self.PARAM_PROJECT],
         image=parameters[self.PARAM_IMAGE_ID])
       response = request.execute(http=auth_http)
-      AppScaleLogger.verbose(str(response), parameters[self.PARAM_VERBOSE])
+      logger.debug(str(response))
       return True
     except errors.HttpError:
       return False
@@ -1004,7 +1004,7 @@ class GCEAgent(BaseAgent):
       request = gce_service.zones().get(project=parameters[self.PARAM_PROJECT],
         zone=parameters[self.PARAM_ZONE])
       response = request.execute(http=auth_http)
-      AppScaleLogger.verbose(str(response), parameters[self.PARAM_VERBOSE])
+      logger.debug(str(response))
       return True
     except errors.HttpError:
       return False
@@ -1029,7 +1029,7 @@ class GCEAgent(BaseAgent):
       request = gce_service.disks().get(project=parameters[self.PARAM_PROJECT],
         disk=disk, zone=parameters[self.PARAM_ZONE])
       response = request.execute(http=auth_http)
-      AppScaleLogger.verbose(str(response), parameters[self.PARAM_VERBOSE])
+      logger.debug(str(response))
       return True
     except errors.HttpError:
       return False
@@ -1056,7 +1056,7 @@ class GCEAgent(BaseAgent):
       instance=instance_id,
       deviceName='sdb')
     response = request.execute(http=auth_http)
-    AppScaleLogger.verbose(str(response), parameters[self.PARAM_VERBOSE])
+    logger.debug(str(response))
     self.ensure_operation_succeeds(gce_service, auth_http, response,
       parameters[self.PARAM_PROJECT])
 
@@ -1114,14 +1114,14 @@ class GCEAgent(BaseAgent):
       oauth2_storage_path = self.OAUTH2_STORAGE_LOCATION
     else:
       # Determine client secrets path
-      client_secrets_path = LocalState.get_client_secrets_location(
+      client_secrets_path = AppScaleState.get_client_secrets_location(
         parameters[self.PARAM_KEYNAME])
       if not os.path.exists(client_secrets_path):
         client_secrets_path = parameters.get(self.PARAM_SECRETS, '')
       # Determine oauth2 storage
       oauth2_storage_path = parameters.get(self.PARAM_STORAGE)
       if not oauth2_storage_path or not os.path.exists(oauth2_storage_path):
-        oauth2_storage_path = LocalState.get_oauth2_storage_location(
+        oauth2_storage_path = AppScaleState.get_oauth2_storage_location(
           parameters[self.PARAM_KEYNAME])
 
     if os.path.exists(client_secrets_path):
@@ -1178,7 +1178,7 @@ class GCEAgent(BaseAgent):
       path = disk['source'].split('/')
       if project == path[-5] and zone == path[-3] and disk_name == path[-1]:
         device_name = '/dev/{}'.format(disk['deviceName'])
-        AppScaleLogger.log('Disk is already attached at {}'.format(device_name))
+        logger.info('Disk is already attached at {}'.format(device_name))
         return device_name
 
     request = gce_service.instances().attachDisk(
@@ -1196,7 +1196,7 @@ class GCEAgent(BaseAgent):
       }
     )
     response = request.execute(auth_http)
-    AppScaleLogger.log(str(response))
+    logger.info(str(response))
     self.ensure_operation_succeeds(gce_service, auth_http, response,
                                    parameters[self.PARAM_PROJECT])
 
@@ -1249,3 +1249,15 @@ class GCEAgent(BaseAgent):
           message = "\n".join([errors['message'] for errors in
             response['error']['errors']])
           raise AgentRuntimeException(str(message))
+
+  def __test_logging(self):
+    logger.info("gceagent info log")
+    logger.debug("gceagent debug log")
+    logger.warn("gceagent warning log")
+    logger.error("gceagent error log")
+    logger.critical("gceagent critical log")
+    try:
+      raise KeyError()
+    except KeyError:
+      logger.exception("gceagent exception")
+      

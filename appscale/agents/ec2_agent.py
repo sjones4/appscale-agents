@@ -8,13 +8,13 @@ import datetime
 import glob
 import os
 import time
+import logging
 
 from boto.ec2.networkinterface import NetworkInterfaceCollection
 from boto.ec2.networkinterface import NetworkInterfaceSpecification
 from boto.exception import EC2ResponseError
 
-from appscale.tools.appscale_logger import AppScaleLogger
-from appscale.tools.local_state import LocalState
+from .config import AppScaleState
 from base_agent import AgentConfigurationException
 from base_agent import AgentRuntimeException
 from base_agent import BaseAgent
@@ -22,7 +22,7 @@ from base_agent import BaseAgent
 
 # pylint: disable-msg=W0511
 #    don't bother about todo's
-
+logger = logging.getLogger(__name__)
 
 class SecurityGroupNotFoundException(Exception):
   """ Exception to raise when a security group could not be found on EC2."""
@@ -133,7 +133,7 @@ class EC2Agent(BaseAgent):
     group = parameters[self.PARAM_GROUP]
     is_autoscale = parameters[self.PARAM_AUTOSCALE_AGENT]
 
-    AppScaleLogger.log("Verifying that keyname {0}".format(keyname) + \
+    logger.info("Verifying that keyname {0}".format(keyname) + \
       " is not already registered.")
     conn = self.open_connection(parameters)
 
@@ -161,11 +161,12 @@ class EC2Agent(BaseAgent):
                           "automatically generated for you.".format(group))
 
 
-    AppScaleLogger.log("Creating key pair: {0}".format(keyname))
+    logger.info("Creating key pair: {0}".format(keyname))
     key_pair = conn.create_key_pair(keyname)
-    ssh_key = '{0}{1}.key'.format(LocalState.LOCAL_APPSCALE_PATH, keyname)
-    LocalState.write_key_file(ssh_key, key_pair.material)
 
+    ssh_key_location = AppScaleState.ssh_key(keyname)
+    AppScaleState.write_key_file(ssh_key_location, key_pair.material)
+    
     sg = self.create_security_group(parameters, group)
 
     self.authorize_security_group(parameters, sg.id, from_port=1,
@@ -192,7 +193,7 @@ class EC2Agent(BaseAgent):
     Raises:
       AgentRuntimeException: If the security group could not be created.
     """
-    AppScaleLogger.log('Creating security group: {0}'.format(group))
+    logger.info('Creating security group: {0}'.format(group))
     conn = self.open_connection(parameters)
     specified_vpc = parameters.get(self.PARAM_VPC_ID)
 
@@ -262,7 +263,7 @@ class EC2Agent(BaseAgent):
       AgentRuntimeException: If the ports could not be opened on the security
       group.
     """
-    AppScaleLogger.log('Authorizing security group {0} for {1} traffic from ' \
+    logger.info('Authorizing security group {0} for {1} traffic from ' \
       'port {2} to port {3}'.format(group_id, ip_protocol, from_port, to_port))
     conn = self.open_connection(parameters)
     retries_left = self.SECURITY_GROUP_RETRY_COUNT
@@ -347,7 +348,7 @@ class EC2Agent(BaseAgent):
     vpc_id = args.get(self.PARAM_VPC_ID)
     subnet_id = args.get(self.PARAM_SUBNET_ID)
     if not vpc_id and not subnet_id:
-      AppScaleLogger.log('Using Classic Networking since subnet and vpc were '
+      logger.info('Using Classic Networking since subnet and vpc were '
                          'not specified.')
     # All further checks are for VPC Networking.
     elif (vpc_id or subnet_id) and not (vpc_id and subnet_id):
@@ -386,11 +387,11 @@ class EC2Agent(BaseAgent):
     """
     params = {
       self.PARAM_CREDENTIALS : {},
-      self.PARAM_GROUP : LocalState.get_group(keyname),
+      self.PARAM_GROUP : AppScaleState.get_group(keyname),
       self.PARAM_KEYNAME : keyname
     }
 
-    zone = LocalState.get_zone(keyname)
+    zone = AppScaleState.get_zone(keyname)
     if zone:
       params[self.PARAM_REGION] = zone[:-1]
     else:
@@ -398,7 +399,7 @@ class EC2Agent(BaseAgent):
 
 
     for credential in self.REQUIRED_CREDENTIALS:
-      cred = LocalState.get_infrastructure_option(tag=credential,
+      cred = AppScaleState.get_infrastructure_option(tag=credential,
                                                   keyname=keyname)
       if not cred:
         raise AgentConfigurationException("no " + credential)
@@ -491,14 +492,14 @@ class EC2Agent(BaseAgent):
     # when the flag is True.
     spot = parameters[self.PARAM_SPOT] in ['True', 'true', True]
 
-    AppScaleLogger.log("Starting {0} machines with machine id {1}, with " \
+    logger.info("Starting {0} machines with machine id {1}, with " \
       "instance type {2}, keyname {3}, in security group {4}, in availability" \
       " zone {5}".format(count, image_id, instance_type, keyname, group, zone))
 
     if spot:
-      AppScaleLogger.log("Using spot instances")
+      logger.info("Using spot instances")
     else:
-      AppScaleLogger.log("Using on-demand instances")
+      logger.info("Using on-demand instances")
 
     start_time = datetime.datetime.now()
     active_public_ips = []
@@ -578,7 +579,7 @@ class EC2Agent(BaseAgent):
         self.MAX_VM_CREATION_TIME)
 
       while datetime.datetime.now() < end_time:
-        AppScaleLogger.log("Waiting for your instances to start...")
+        logger.info("Waiting for your instances to start...")
         public_ips, private_ips, instance_ids = self.describe_instances(
           parameters)
 
@@ -602,17 +603,17 @@ class EC2Agent(BaseAgent):
         for index in range(0, len(public_ips)):
           if public_ips[index] == '0.0.0.0':
             instance_to_term = instance_ids[index]
-            AppScaleLogger.log('Instance {0} failed to get a public IP address'\
+            logger.info('Instance {0} failed to get a public IP address'\
                     'and is being terminated'.format(instance_to_term))
             conn.terminate_instances([instance_to_term])
 
       end_time = datetime.datetime.now()
       total_time = end_time - start_time
       if spot:
-        AppScaleLogger.log("Started {0} spot instances in {1} seconds" \
+        logger.info("Started {0} spot instances in {1} seconds" \
           .format(count, total_time.seconds))
       else:
-        AppScaleLogger.log("Started {0} on-demand instances in {1} seconds" \
+        logger.info("Started {0} on-demand instances in {1} seconds" \
           .format(count, total_time.seconds))
       return instance_ids, public_ips, private_ips
     except EC2ResponseError as exception:
@@ -652,10 +653,10 @@ class EC2Agent(BaseAgent):
     instance_ids = parameters[self.PARAM_INSTANCE_IDS]
     conn = self.open_connection(parameters)
     conn.stop_instances(instance_ids)
-    AppScaleLogger.log('Stopping instances: '+' '.join(instance_ids))
+    logger.info('Stopping instances: '+' '.join(instance_ids))
     if not self.wait_for_status_change(parameters, conn, 'stopped',
            max_wait_time=120):
-      AppScaleLogger.log("re-stopping instances: "+' '.join(instance_ids))
+      logger.info("re-stopping instances: "+' '.join(instance_ids))
       conn.stop_instances(instance_ids)
       if not self.wait_for_status_change(parameters, conn, 'stopped',
             max_wait_time=120):
@@ -675,10 +676,10 @@ class EC2Agent(BaseAgent):
     instance_ids = parameters[self.PARAM_INSTANCE_IDS]
     conn = self.open_connection(parameters)
     conn.terminate_instances(instance_ids)
-    AppScaleLogger.log('Terminating instances: ' + ' '.join(instance_ids))
+    logger.info('Terminating instances: ' + ' '.join(instance_ids))
     if not self.wait_for_status_change(parameters, conn, 'terminated',
             max_wait_time=120):
-      AppScaleLogger.log("re-terminating instances: " + ' '.join(instance_ids))
+      logger.info("re-terminating instances: " + ' '.join(instance_ids))
       conn.terminate_instances(instance_ids)
       if not self.wait_for_status_change(parameters, conn, 'terminated',
                 max_wait_time=120):
@@ -688,7 +689,7 @@ class EC2Agent(BaseAgent):
     # from the system (ie no more in describe-instances).  This helps when
     # bringing deployments up and down frequently and instances are still
     # associated with keyname (although they are terminated).
-    AppScaleLogger.log("Removing terminated instances: " + ' '.join(instance_ids))
+    logger.info("Removing terminated instances: " + ' '.join(instance_ids))
     conn.terminate_instances(instance_ids)
 
 
@@ -740,11 +741,11 @@ class EC2Agent(BaseAgent):
     try:
       conn = self.open_connection(parameters)
       conn.get_all_addresses(elastic_ip)
-      AppScaleLogger.log('Elastic IP {0} can be used for this AppScale ' \
+      logger.info('Elastic IP {0} can be used for this AppScale ' \
         'deployment.'.format(elastic_ip))
       return True
     except boto.exception.EC2ResponseError:
-      AppScaleLogger.log('Elastic IP {0} does not exist.'.format(elastic_ip))
+      logger.info('Elastic IP {0} does not exist.'.format(elastic_ip))
       return False
 
 
@@ -760,10 +761,10 @@ class EC2Agent(BaseAgent):
     try:
       conn = self.open_connection(parameters)
       conn.get_image(image_id)
-      AppScaleLogger.log('Machine image {0} does exist'.format(image_id))
+      logger.info('Machine image {0} does exist'.format(image_id))
       return True
     except boto.exception.EC2ResponseError:
-      AppScaleLogger.log('Machine image {0} does not exist'.format(image_id))
+      logger.info('Machine image {0} does not exist'.format(image_id))
       return False
 
 
@@ -780,10 +781,10 @@ class EC2Agent(BaseAgent):
     conn = self.open_connection(parameters)
     try:
       conn.get_all_volumes([disk_name])
-      AppScaleLogger.log('EBS volume {0} does exist'.format(disk_name))
+      logger.info('EBS volume {0} does exist'.format(disk_name))
       return True
     except boto.exception.EC2ResponseError:
-      AppScaleLogger.log('EBS volume {0} does not exist'.format(disk_name))
+      logger.info('EBS volume {0} does not exist'.format(disk_name))
       return False
 
 
@@ -813,14 +814,14 @@ class EC2Agent(BaseAgent):
     conn = self.open_connection(parameters)
 
     try:
-      AppScaleLogger.log('Attaching volume {0} to instance {1}, at {2}'.format(
+      logger.info('Attaching volume {0} to instance {1}, at {2}'.format(
         disk_name, instance_id, mount_point))
       conn.attach_volume(disk_name, instance_id, mount_point)
       return mount_point
     except EC2ResponseError as exception:
       if self.disk_attached(conn, disk_name, instance_id):
         return mount_point
-      AppScaleLogger.log('An error occurred when trying to attach volume {0} '
+      logger.info('An error occurred when trying to attach volume {0} '
         'to instance {1} at {2}'.format(disk_name, instance_id, mount_point))
       self.handle_failure('EC2 response error while attaching volume:' +
         exception.error_message)
@@ -846,7 +847,7 @@ class EC2Agent(BaseAgent):
 
       return False
     except EC2ResponseError as exception:
-      AppScaleLogger.log('An error occurred when trying to find '
+      logger.info('An error occurred when trying to find '
                          'attached volumes.')
       self.handle_failure('EC2 response error while checking attached '
                           'volumes: {}'.format(exception.error_message))
@@ -868,7 +869,7 @@ class EC2Agent(BaseAgent):
       conn.detach_volume(disk_name, instance_id)
       return True
     except boto.exception.EC2ResponseError:
-      AppScaleLogger.log("Could not detach volume with name {0}".format(
+      logger.info("Could not detach volume with name {0}".format(
         disk_name))
       return False
 
@@ -886,10 +887,10 @@ class EC2Agent(BaseAgent):
     try:
       conn = self.open_connection(parameters)
       conn.get_all_zones(zone)
-      AppScaleLogger.log('Availability zone {0} does exist'.format(zone))
+      logger.info('Availability zone {0} does exist'.format(zone))
       return True
     except boto.exception.EC2ResponseError:
-      AppScaleLogger.log('Availability zone {0} does not exist'.format(zone))
+      logger.info('Availability zone {0} does not exist'.format(zone))
       return False
 
 
@@ -900,12 +901,12 @@ class EC2Agent(BaseAgent):
     Args:
       parameters: A dict that contains the keyname and security group to delete.
     """
-    AppScaleLogger.log("Deleting keyname {0}".format(
+    logger.info("Deleting keyname {0}".format(
       parameters[self.PARAM_KEYNAME]))
     conn = self.open_connection(parameters)
     conn.delete_key_pair(parameters[self.PARAM_KEYNAME])
 
-    AppScaleLogger.log("Deleting security group {0}".format(
+    logger.info("Deleting security group {0}".format(
       parameters[self.PARAM_GROUP]))
     retries_left = self.SECURITY_GROUP_RETRY_COUNT
     while True:
@@ -921,7 +922,7 @@ class EC2Agent(BaseAgent):
           raise AgentRuntimeException('Error deleting security group! Reason: '
                                       '{}'.format(e.message))
       except SecurityGroupNotFoundException:
-        AppScaleLogger.log('Could not find security group {}, skipping '
+        logger.info('Could not find security group {}, skipping '
                            'delete.'.format(parameters[self.PARAM_GROUP]))
         return
 
@@ -953,7 +954,7 @@ class EC2Agent(BaseAgent):
       var_sum += entry.price
     average = var_sum / len(history)
     bid_price = average * 1.10
-    AppScaleLogger.log('The average spot instance price for a {0} machine is'\
+    logger.info('The average spot instance price for a {0} machine is'\
         ' {1}, and 10% more is {2}'.format(instance_type, average, bid_price))
     return bid_price
 
@@ -993,7 +994,7 @@ class EC2Agent(BaseAgent):
     Raises:
       AgentRuntimeException Contains the input error message.
     """
-    AppScaleLogger.log(msg)
+    logger.info(msg)
     raise AgentRuntimeException(msg)
 
   def __describe_instances(self, parameters):
@@ -1032,3 +1033,17 @@ class EC2Agent(BaseAgent):
         public_ips.append(i.ip_address)
         private_ips.append(i.private_ip_address)
     return public_ips, private_ips, instance_ids
+
+  def __test_logging(self):
+    """ Output a couple of messages at different logging levels"""
+    logger.info("ec2agent info log")
+    logger.debug("ec2agent debug log")
+    logger.warn("ec2agent warning log")
+    logger.error("ec2agent error log")
+    logger.critical("ec2agent critical log")
+    try:
+      raise KeyError()
+    except KeyError:
+      logger.exception("ec2agent exception")
+    
+    

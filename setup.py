@@ -54,7 +54,7 @@ setup(
     'msrestazure==0.4.34',
     'oauth2client==4.0.0',
     'PyYAML',
-    'requests[security]>=2.16.0,<=2.19.1',
+    'requests[security]>=2.20.0',
     'retrying==1.3.3',
     'setuptools>=11.3,<34',
     'SOAPpy',
@@ -74,7 +74,7 @@ setup(
     'Topic :: Utilities'
   ],
   namespace_packages=['appscale'],
-  packages=['appscale', 'appscale.agents'],
+  packages=['appscale.agents'],
   entry_points={
     'console_scripts': [
     ]

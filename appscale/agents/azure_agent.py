@@ -72,11 +72,13 @@ from msrestazure.azure_exceptions import CloudError
 from haikunator import Haikunator
 
 # AppScale-specific imports
-from appscale.tools.appscale_logger import AppScaleLogger
-from appscale.tools.local_state import LocalState
+from .config import AppScaleState
+
 from base_agent import AgentConfigurationException
 from base_agent import AgentRuntimeException
 from base_agent import BaseAgent
+
+logger = logging.getLogger(__name__)
 
 class AzureAgent(BaseAgent):
   """ AzureAgent defines a specialized BaseAgent that allows for interaction
@@ -187,7 +189,7 @@ class AzureAgent(BaseAgent):
       # raised if the credentials are invalid.
       resource_client.resource_groups.list()
     except ClientException as error:
-      logging.exception("Error authenticating with provided credentials.")
+      logger.exception("Error authenticating with provided credentials.")
       raise AgentConfigurationException("Unable to authenticate using the "
         "credentials provided. Reason: {}".format(error.message))
 
@@ -219,18 +221,19 @@ class AzureAgent(BaseAgent):
     zone = parameters[self.PARAM_ZONE]
     subscription_id = str(parameters[self.PARAM_SUBSCRIBER_ID])
 
-    AppScaleLogger.log("Verifying that SSH key exists locally.")
+    logger.info("Verifying that SSH key exists locally.")
     keyname = parameters[self.PARAM_KEYNAME]
-    private_key = LocalState.LOCAL_APPSCALE_PATH + keyname
-    public_key = private_key + ".pub"
 
+    private_key = AppScaleState.private_key(keyname)
+    public_key = AppScaleState.public_key(keyname)
+    
     if os.path.exists(private_key) or os.path.exists(public_key):
       raise AgentRuntimeException("SSH key already found locally - please "
                                   "use a different keyname.")
 
-    LocalState.generate_rsa_key(keyname, parameters[self.PARAM_VERBOSE])
+    AppScaleState.generate_rsa_key(keyname)
 
-    AppScaleLogger.log("Configuring network for machine/s under "
+    logger.info("Configuring network for machine/s under "
                        "resource group '{0}' with storage account '{1}' "
                        "in zone '{2}'".format(resource_group, storage_account, zone))
     # Create a resource group and an associated storage account to access resources.
@@ -241,11 +244,11 @@ class AzureAgent(BaseAgent):
       resource_client.providers.register(self.MICROSOFT_COMPUTE_RESOURCE)
       resource_client.providers.register(self.MICROSOFT_NETWORK_RESOURCE)
     except CloudError as error:
-      logging.exception("Encountered an error while registering provider.")
+      logger.exception("Encountered an error while registering provider.")
       raise AgentRuntimeException("Unable to register provider. Reason: {}"
                                   .format(error.message))
     except ClientException as e:
-      logging.exception("ClientException received while attempting to contact "
+      logger.exception("ClientException received while attempting to contact "
                         "Azure.")
       raise AgentConfigurationException("Unable to communicate with Azure "
           "while trying to register provider. Please check your cloud "
@@ -344,11 +347,11 @@ class AzureAgent(BaseAgent):
       if result.provisioning_state == 'Succeeded':
         return True
       else:
-        AppScaleLogger.log("Unable to detach Disk {} from VM {}".format(
+        logger.info("Unable to detach Disk {} from VM {}".format(
             disk_name, instance_id))
         return False
     except CloudError as error:
-      AppScaleLogger.log("Unable to detach Disk {} from VM {}: {}".format(
+      logger.info("Unable to detach Disk {} from VM {}: {}".format(
           disk_name, instance_id, error.message))
       return False
 
@@ -410,11 +413,11 @@ class AzureAgent(BaseAgent):
         private_ips.append(private_ip)
         instance_ids.append(vm.name)
     except CloudError as e:
-      logging.exception("CloudError received while trying to describe "
+      logger.exception("CloudError received while trying to describe "
                         "instances.")
       raise AgentRuntimeException(e.message)
     except ClientException as e:
-      logging.exception("ClientException received while attempting to contact "
+      logger.exception("ClientException received while attempting to contact "
                         "Azure.")
       raise AgentConfigurationException("Unable to communicate with Azure "
           "while trying to describe instances. Please check your cloud "
@@ -495,7 +498,7 @@ class AzureAgent(BaseAgent):
 
       for exception in lb_vms_exceptions:
         if not isinstance(exception, (CloudError, AgentRuntimeException)):
-          logging.exception(exception)
+          logger.exception(exception)
       if lb_vms_exceptions:
         raise AgentRuntimeException(str(lb_vms_exceptions))
     else:
@@ -528,13 +531,13 @@ class AzureAgent(BaseAgent):
                         platform_fault_domain_count=3))
 
     except CloudError as error:
-      logging.exception("Azure agent received a CloudError while creating an "
+      logger.exception("Azure agent received a CloudError while creating an "
                         "availability set.")
       raise AgentRuntimeException("Unable to create an Availability Set "
                                   "{0}: {1}".format(lb_avail_set_name,
                                                     error.message))
     except ClientException as e:
-      logging.exception("ClientException received while attempting to contact Azure.")
+      logger.exception("ClientException received while attempting to contact Azure.")
       raise AgentConfigurationException("Unable to communicate with Azure "
                                         "while trying to create an availability set. "
                                         "Please check your cloud configuration. "
@@ -583,11 +586,10 @@ class AzureAgent(BaseAgent):
     """
     resource_group = parameters[self.PARAM_RESOURCE_GROUP]
     zone = parameters[self.PARAM_ZONE]
-    verbose = parameters[self.PARAM_VERBOSE]
     subscription_id = str(parameters[self.PARAM_SUBSCRIBER_ID])
     azure_instance_type = parameters[self.PARAM_INSTANCE_TYPE]
-    AppScaleLogger.verbose("Creating a Virtual Machine '{}'".
-                           format(vm_network_name), verbose)
+    logger.debug("Creating a Virtual Machine '{}'".
+                           format(vm_network_name))
 
     compute_client = ComputeManagementClient(credentials, subscription_id)
     linux_config = self.create_linux_configuration(parameters)
@@ -644,18 +646,18 @@ class AzureAgent(BaseAgent):
         public_ip_address = network_client.public_ip_addresses.get(
           resource_group, vm_network_name)
         if public_ip_address.ip_address:
-          AppScaleLogger.log('Azure load balancer VM is available at {}'.
+          logger.info('Azure load balancer VM is available at {}'.
                              format(public_ip_address.ip_address))
           break
-        AppScaleLogger.verbose("Waiting {} second(s) for IP address to be "
-                               "available".format(self.SLEEP_TIME), verbose)
+        logger.debug("Waiting {} second(s) for IP address to be "
+                               "available".format(self.SLEEP_TIME))
         time.sleep(self.SLEEP_TIME)
     except CloudError as error:
-      logging.exception("Azure agent received a CloudError.")
+      logger.exception("Azure agent received a CloudError.")
       raise AgentRuntimeException("Unable to create virtual machine. "
                                   "Reason: {}".format(error.message))
     except ClientException as e:
-      logging.exception("ClientException received while attempting to contact "
+      logger.exception("ClientException received while attempting to contact "
                         "Azure.")
       raise AgentConfigurationException("Unable to communicate with Azure "
           "while trying to create virtual machine. Please check your cloud "
@@ -672,8 +674,8 @@ class AzureAgent(BaseAgent):
     """
     is_autoscale = parameters[self.PARAM_AUTOSCALE_AGENT]
     keyname = parameters[self.PARAM_KEYNAME]
-    private_key_path = LocalState.LOCAL_APPSCALE_PATH + keyname
-    public_key_path = private_key_path + ".pub"
+    private_key_path = AppScaleState.private_key(keyname)
+    public_key_path = AppScaleState.public_key(keyname)
     auth_keys_path = "/home/{}/.ssh/authorized_keys".format(self.ADMIN_USERNAME)
 
     if is_autoscale in ['True', True]:
@@ -727,12 +729,12 @@ class AzureAgent(BaseAgent):
                                                              vmss.name)
         scalesets_and_counts.append((vmss, ss_instance_count))
     except CloudError as error:
-      logging.exception("Azure agent received a CloudError trying to add "
+      logger.exception("Azure agent received a CloudError trying to add "
                         "to Scale Sets.")
       raise AgentRuntimeException("Unable to add to Scale Sets due to: {}"
                                   .format(error.message))
     except ClientException as e:
-      logging.exception("ClientException received while attempting to contact "
+      logger.exception("ClientException received while attempting to contact "
                         "Azure.")
       raise AgentConfigurationException("Unable to communicate with Azure "
           "while trying to add to Scale Sets. Please check your cloud "
@@ -758,11 +760,11 @@ class AzureAgent(BaseAgent):
 
         self.wait_for_ss_update(new_capacity, create_update_response, vmss.name)
       except CloudError as error:
-        logging.exception("Azure agent received a CloudError.")
+        logger.exception("Azure agent received a CloudError.")
         raise AgentRuntimeException("Unable to create/update ScaleSet. "
                                     "Reason: {}".format(error.message))
       except ClientException as e:
-        logging.exception("ClientException received while attempting to contact"
+        logger.exception("ClientException received while attempting to contact"
           " Azure.")
         raise AgentConfigurationException("Unable to communicate with Azure "
           "while trying to create/update ScaleSet. Please check your cloud "
@@ -791,7 +793,6 @@ class AzureAgent(BaseAgent):
         AgentConfigurationException: If the operation to create a virtual
         machine scale set did not succeed.
     """
-    verbose = parameters[self.PARAM_VERBOSE]
     random_resource_name = Haikunator().haikunate()
 
     num_instances_to_add = count
@@ -828,8 +829,8 @@ class AzureAgent(BaseAgent):
           capacity = self.MAX_VMSS_CAPACITY
           if remaining_vms_count < self.MAX_VMSS_CAPACITY:
             capacity = remaining_vms_count
-          AppScaleLogger.verbose('Creating a Scale Set {0} with {1} VM(s)'.
-                                 format(scale_set_name, capacity), verbose)
+          logger.debug('Creating a Scale Set {0} with {1} VM(s)'.
+                                 format(scale_set_name, capacity))
 
           # Start creating scalesets.
           scalesets_futures.append(executor.submit(self.create_scale_set,
@@ -842,15 +843,15 @@ class AzureAgent(BaseAgent):
 
       for exception in scalesets_exceptions:
         if not isinstance(exception, (CloudError, AgentRuntimeException)):
-          logging.exception(exception)
+          logger.exception(exception)
       if scalesets_exceptions:
         raise AgentRuntimeException(str(scalesets_exceptions))
 
     # Create a scale set using the count of VMs provided.
     else:
       scale_set_name = random_resource_name + "-scaleset-{}vms".format(num_instances_to_add)
-      AppScaleLogger.verbose('Creating a Scale Set {0} with {1} VM(s)'.
-                             format(scale_set_name, num_instances_to_add), verbose)
+      logger.debug('Creating a Scale Set {0} with {1} VM(s)'.
+                             format(scale_set_name, num_instances_to_add))
       self.create_scale_set(num_instances_to_add, parameters, random_resource_name,
                             scale_set_name, subnet)
 
@@ -937,11 +938,11 @@ class AzureAgent(BaseAgent):
 
       self.wait_for_ss_update(count, create_update_response, scale_set_name)
     except CloudError as error:
-      logging.exception("Azure agent received a CloudError.")
+      logger.exception("Azure agent received a CloudError.")
       raise AgentRuntimeException("Unable to create or update Scale Set. "
                                   "Reason: {}".format(error.message))
     except ClientException as e:
-      logging.exception("ClientException received while attempting to contact "
+      logger.exception("ClientException received while attempting to contact "
                         "Azure.")
       raise AgentConfigurationException("Unable to communicate with Azure "
           "while trying to create a scale set. Please check your cloud "
@@ -966,19 +967,19 @@ class AzureAgent(BaseAgent):
       create_update_response.wait(timeout=self.MAX_VMSS_WAIT_TIME)
       result = create_update_response.result()
       if result.provisioning_state == 'Succeeded':
-        AppScaleLogger.log("Scale Set '{0}' with {1} VM(s) has been successfully "
+        logger.info("Scale Set '{0}' with {1} VM(s) has been successfully "
                            "configured!".format(scale_set_name, count))
       else:
-        AppScaleLogger.log("Unable to create a Scale Set of {0} "
+        logger.info("Unable to create a Scale Set of {0} "
                            "VM(s).Provisioning Status: {1}"
                            .format(count, result.provisioning_state))
 
     except CloudError as error:
-      logging.exception("CloudError during creation of Scale Set.")
+      logger.exception("CloudError during creation of Scale Set.")
       raise AgentRuntimeException("Unable to create a Scale Set of {0} "
                                   "VM(s): {1}".format(count, error.message))
     except ClientException as e:
-      logging.exception("ClientException received while attempting to "
+      logger.exception("ClientException received while attempting to "
                         "contact Azure.")
       raise AgentConfigurationException("Unable to communicate with Azure "
           "while trying to create Scale Set. Please check your cloud "
@@ -1005,20 +1006,19 @@ class AzureAgent(BaseAgent):
     credentials = self.open_connection(parameters)
     resource_group = parameters[self.PARAM_RESOURCE_GROUP]
     subscription_id = str(parameters[self.PARAM_SUBSCRIBER_ID])
-    verbose = parameters[self.PARAM_VERBOSE]
     instances_to_delete = parameters[self.PARAM_INSTANCE_IDS]
-    AppScaleLogger.verbose("Terminating the vm instance(s) '{}'".
-                           format(instances_to_delete), verbose)
+    logger.debug("Terminating the vm instance(s) '{}'".
+                           format(instances_to_delete))
 
     compute_client = ComputeManagementClient(credentials, subscription_id)
     try:
       vmss_list = list(compute_client.virtual_machine_scale_sets.list(
           resource_group))
     except CloudError as e:
-      logging.exception("CloudError received trying to list Scale Sets.")
+      logger.exception("CloudError received trying to list Scale Sets.")
       raise AgentRuntimeException(e.message)
     except ClientException as e:
-      logging.exception("ClientException received while attempting to contact "
+      logger.exception("ClientException received while attempting to contact "
                         "Azure.")
       raise AgentConfigurationException("Unable to communicate with Azure "
           "while trying to list Scale Sets. Please check your cloud "
@@ -1040,11 +1040,11 @@ class AzureAgent(BaseAgent):
             resource_group, vmss.name)
             if vm.name in instances_to_delete]
       except CloudError as e:
-        logging.exception("CloudError received while trying to terminate "
+        logger.exception("CloudError received while trying to terminate "
                           "instances.")
         raise AgentRuntimeException(e.message)
       except ClientException as e:
-        logging.exception("ClientException received while attempting to "
+        logger.exception("ClientException received while attempting to "
                           "contact Azure.")
         raise AgentConfigurationException("Unable to communicate with Azure "
           "while trying to terminate instances. Please check your cloud "
@@ -1063,12 +1063,12 @@ class AzureAgent(BaseAgent):
 
       for exception in vmss_vm_delete_exceptions:
         if not isinstance(exception, (CloudError, AgentRuntimeException)):
-          logging.exception(exception)
+          logger.exception(exception)
       if vmss_vm_delete_exceptions:
         raise AgentRuntimeException(str(vmss_vm_delete_exceptions))
 
-      AppScaleLogger.log("Virtual machine(s) have been successfully downscaled.")
-      AppScaleLogger.log("Cleaning up any Scale Sets, if needed ...")
+      logger.info("Virtual machine(s) have been successfully downscaled.")
+      logger.info("Cleaning up any Scale Sets, if needed ...")
       vmss_delete_futures = []
       vmss_delete_exceptions = []
 
@@ -1076,11 +1076,11 @@ class AzureAgent(BaseAgent):
         ss_to_delete = [vmss.name for vmss in vmss_list if not
           any(compute_client.virtual_machine_scale_set_vms.list(resource_group, vmss.name))]
       except CloudError as e:
-        logging.exception("CloudError received while trying to terminate "
+        logger.exception("CloudError received while trying to terminate "
                           "instances.")
         raise AgentRuntimeException(e.message)
       except ClientException as e:
-        logging.exception("ClientException received while attempting to "
+        logger.exception("ClientException received while attempting to "
                           "contact Azure.")
         raise AgentConfigurationException("Unable to communicate with Azure "
           "while trying to terminate instances. Please check your cloud "
@@ -1099,7 +1099,7 @@ class AzureAgent(BaseAgent):
 
       for exception in vmss_delete_exceptions:
         if not isinstance(exception, (CloudError, AgentRuntimeException)):
-          logging.exception(exception)
+          logger.exception(exception)
       if vmss_delete_exceptions:
         raise AgentRuntimeException(str(vmss_delete_exceptions))
       return
@@ -1116,11 +1116,11 @@ class AzureAgent(BaseAgent):
        for vm in compute_client.virtual_machine_scale_set_vms.list(
        resource_group, vmss.name)]
     except CloudError as e:
-      logging.exception("CloudError received while trying to terminate "
+      logger.exception("CloudError received while trying to terminate "
                         "instances.")
       raise AgentRuntimeException(e.message)
     except ClientException as e:
-      logging.exception("ClientException received while attempting to contact "
+      logger.exception("ClientException received while attempting to contact "
                         "Azure.")
       raise AgentConfigurationException("Unable to communicate with Azure "
           "while trying to terminate instances. Please check your cloud "
@@ -1141,11 +1141,11 @@ class AzureAgent(BaseAgent):
 
     for exception in vmss_delete_exceptions:
       if not isinstance(exception, (CloudError, AgentRuntimeException)):
-        logging.exception(exception)
+        logger.exception(exception)
     if vmss_delete_exceptions:
       raise AgentRuntimeException(str(vmss_delete_exceptions))
 
-    AppScaleLogger.log("Virtual machine scale set(s) have been successfully "
+    logger.info("Virtual machine scale set(s) have been successfully "
                        "deleted.")
     # Delete the load balancer virtual machines matching the given instance ids.
     delete_lb_instances = self.diff(instances_to_delete, delete_ss_instances)
@@ -1163,11 +1163,11 @@ class AzureAgent(BaseAgent):
 
     for exception in lb_delete_exceptions:
       if not isinstance(exception, (CloudError, AgentRuntimeException)):
-        logging.exception(exception)
+        logger.exception(exception)
     if lb_delete_exceptions:
       raise AgentRuntimeException(str(lb_delete_exceptions))
 
-    AppScaleLogger.log("Load balancer virtual machine(s) have been "
+    logger.info("Load balancer virtual machine(s) have been "
        "successfully deleted")
 
   def delete_virtual_machine_scale_set(self, compute_client, parameters, vmss_name):
@@ -1183,26 +1183,25 @@ class AzureAgent(BaseAgent):
       AgentRuntimeException: If a scale set could not be successfully deleted.
     """
     resource_group = parameters[self.PARAM_RESOURCE_GROUP]
-    verbose = parameters[self.PARAM_VERBOSE]
-    AppScaleLogger.verbose("Deleting Scale Set {} ...".format(vmss_name), verbose)
+    logger.debug("Deleting Scale Set {} ...".format(vmss_name))
     try:
       delete_response = compute_client.virtual_machine_scale_sets.delete(
           resource_group, vmss_name)
     except CloudError as error:
-      logging.exception("CloudError received trying to clean up Scale Set.")
+      logger.exception("CloudError received trying to clean up Scale Set.")
       raise AgentRuntimeException("Unable to clean up Scale Set {}. "
                                   "Reason: {}".format(vmss_name, error.message))
     except ClientException as e:
-      logging.exception("ClientException received while attempting to contact "
+      logger.exception("ClientException received while attempting to contact "
                         "Azure.")
       raise AgentConfigurationException("Unable to communicate with Azure "
           "while trying to clean up Scale Set {}. Please check your "
           "cloud configuration. Reason: {}".format(vmss_name, e.message))
     resource_name = 'Virtual Machine Scale Set' + ":" + vmss_name
     self.sleep_until_delete_operation_done(delete_response, resource_name,
-                                           self.MAX_VM_UPDATE_TIME, verbose)
-    AppScaleLogger.verbose("Virtual Machine Scale Set {} has been successfully "
-                           "deleted.".format(vmss_name), verbose)
+                                           self.MAX_VM_UPDATE_TIME)
+    logger.debug("Virtual Machine Scale Set {} has been successfully "
+                           "deleted.".format(vmss_name))
 
   def delete_vmss_instance(self, compute_client, parameters, vmss_name, instance_id):
     """ Deletes the specified virtual machine instance from the given Scale Set.
@@ -1214,22 +1213,21 @@ class AzureAgent(BaseAgent):
       instance_id: The ID of the instance in the Scale Set to be deleted.
     """
     resource_group = parameters[self.PARAM_RESOURCE_GROUP]
-    verbose = parameters[self.PARAM_VERBOSE]
 
     vm_info = "Virtual Machine {0} from Scale Set {1}".format(instance_id,
                                                               vmss_name)
 
-    AppScaleLogger.verbose("Deleting {0} ...".format(vm_info), verbose)
+    logger.debug("Deleting {0} ...".format(vm_info))
     try:
       result = compute_client.virtual_machine_scale_set_vms.delete(
           resource_group, vmss_name, instance_id)
     except CloudError as error:
-      logging.exception("CloudError received trying to clean up scale set.")
+      logger.exception("CloudError received trying to clean up scale set.")
       raise AgentRuntimeException("Unable to clean up VM {} from Scale Set {}. "
                                   "Reason: {}".format(instance_id, vmss_name,
                                                       error.message))
     except ClientException as e:
-      logging.exception("ClientException received while attempting to contact "
+      logger.exception("ClientException received while attempting to contact "
                         "Azure.")
       raise AgentConfigurationException("Unable to communicate with Azure "
           "while trying to clean up VM {} from Scale Set {}. Please check your "
@@ -1237,10 +1235,10 @@ class AzureAgent(BaseAgent):
                                                    e.message))
     resource_name = 'Virtual Machine Instance ' + instance_id
     self.sleep_until_delete_operation_done(result, resource_name,
-                                           self.MAX_VM_UPDATE_TIME, verbose)
+                                           self.MAX_VM_UPDATE_TIME)
 
-    AppScaleLogger.verbose("{0} from scaleset {1} has been successfully "
-                           "deleted".format(instance_id, vmss_name), verbose)
+    logger.debug("{0} from scaleset {1} has been successfully "
+                           "deleted".format(instance_id, vmss_name))
 
   def delete_virtual_machine(self, compute_client, parameters, vm_name):
     """ Deletes the virtual machine from the resource_group specified.
@@ -1251,28 +1249,27 @@ class AzureAgent(BaseAgent):
       vm_name: The name of the virtual machine to be deleted.
     """
     resource_group = parameters[self.PARAM_RESOURCE_GROUP]
-    verbose = parameters[self.PARAM_VERBOSE]
-    AppScaleLogger.verbose("Deleting Virtual Machine {} ...".format(vm_name), verbose)
+    logger.debug("Deleting Virtual Machine {} ...".format(vm_name))
     try:
       result = compute_client.virtual_machines.delete(resource_group, vm_name)
     except CloudError as error:
-      logging.exception("CloudError received trying to clean up scale set.")
+      logger.exception("CloudError received trying to clean up scale set.")
       raise AgentRuntimeException("Unable to clean up Virtual Machine {}. "
                                   "Reason: {}".format(vm_name, error.message))
     except ClientException as e:
-      logging.exception("ClientException received while attempting to contact "
+      logger.exception("ClientException received while attempting to contact "
                         "Azure.")
       raise AgentConfigurationException("Unable to communicate with Azure "
           "while trying to clean up Virtual Machine {}. Please check your "
           "cloud configuration. Reason: {}".format(vm_name, e.message))
     resource_name = 'Virtual Machine' + ':' + vm_name
     self.sleep_until_delete_operation_done(result, resource_name,
-                                           self.MAX_VM_UPDATE_TIME, verbose)
-    AppScaleLogger.verbose("Virtual Machine {} has been successfully deleted.".
-                           format(vm_name), verbose)
+                                           self.MAX_VM_UPDATE_TIME)
+    logger.debug("Virtual Machine {} has been successfully deleted.".
+                           format(vm_name))
 
   def sleep_until_delete_operation_done(self, result, resource_name,
-                                        max_sleep, verbose):
+                                        max_sleep):
     """ Sleeps until the delete operation for the resource is completed
     successfully.
     Args:
@@ -1287,14 +1284,14 @@ class AzureAgent(BaseAgent):
     """
     time_start = time.time()
     while not result.done():
-      AppScaleLogger.verbose("Waiting {0} second(s) for {1} to be deleted.".
-                             format(self.SLEEP_TIME, resource_name), verbose)
+      logger.debug("Waiting {0} second(s) for {1} to be deleted.".
+                             format(self.SLEEP_TIME, resource_name))
       time.sleep(self.SLEEP_TIME)
       total_sleep_time = time.time() - time_start
       if total_sleep_time > max_sleep:
         err_msg = "Waited {0} second(s) for {1} to be deleted. Operation has " \
                   "timed out.".format(total_sleep_time, resource_name)
-        AppScaleLogger.log(err_msg)
+        logger.info(err_msg)
         raise AgentRuntimeException(err_msg)
 
   def does_address_exist(self, parameters):
@@ -1358,7 +1355,7 @@ class AzureAgent(BaseAgent):
           if zone in resource_type.locations:
             return True
     except ClientException as error:
-      logging.exception("Unable to check if zone exists.")
+      logger.exception("Unable to check if zone exists.")
       raise AgentConfigurationException("Unable to check if zone exists. "
                                         "Please check your cloud "
                                         "configuration. Reason: {}".format(
@@ -1380,9 +1377,8 @@ class AzureAgent(BaseAgent):
     resource_group = parameters[self.PARAM_RESOURCE_GROUP]
     credentials = self.open_connection(parameters)
     network_client = NetworkManagementClient(credentials, subscription_id)
-    verbose = parameters[self.PARAM_VERBOSE]
 
-    AppScaleLogger.log("Cleaning up the network configuration created for this "
+    logger.info("Cleaning up the network configuration created for this "
                        "deployment ...")
     try:
       network_interfaces = network_client.network_interfaces.list(resource_group)
@@ -1390,21 +1386,21 @@ class AzureAgent(BaseAgent):
         result = network_client.network_interfaces.delete(resource_group, interface.name)
         resource_name = 'Network Interface' + ':' + interface.name
         self.sleep_until_delete_operation_done(result, resource_name,
-                                               self.MAX_SLEEP_TIME, verbose)
-        AppScaleLogger.verbose("Network Interface {} has been successfully deleted.".
-                               format(interface.name), verbose)
+                                               self.MAX_SLEEP_TIME)
+        logger.debug("Network Interface {} has been successfully deleted.".
+                               format(interface.name))
     except CloudError as error:
-      logging.exception("CloudError received trying to clean up network interfaces.")
+      logger.exception("CloudError received trying to clean up network interfaces.")
       raise AgentRuntimeException("Unable to clean up network interfaces. "
                                   "Reason: {}".format(error.message))
     except ClientException as e:
-      logging.exception("ClientException received while attempting to contact "
+      logger.exception("ClientException received while attempting to contact "
                         "Azure.")
       raise AgentConfigurationException("Unable to communicate with Azure "
           "while trying to clean up network interfaces. Please check your "
           "cloud configuration. Reason: {}".format(e.message))
 
-    AppScaleLogger.log("Network Interface(s) have been successfully deleted.")
+    logger.info("Network Interface(s) have been successfully deleted.")
 
     try:
       public_ip_addresses = network_client.public_ip_addresses.list(resource_group)
@@ -1412,21 +1408,21 @@ class AzureAgent(BaseAgent):
         result = network_client.public_ip_addresses.delete(resource_group, public_ip.name)
         resource_name = 'Public IP Address' + ':' + public_ip.name
         self.sleep_until_delete_operation_done(result, resource_name,
-                                               self.MAX_SLEEP_TIME, verbose)
-        AppScaleLogger.verbose("Public IP Address {} has been successfully deleted.".
-                               format(public_ip.name), verbose)
+                                               self.MAX_SLEEP_TIME)
+        logger.debug("Public IP Address {} has been successfully deleted.".
+                               format(public_ip.name))
     except CloudError as error:
-      logging.exception("Unable to clean up public ips.")
+      logger.exception("Unable to clean up public ips.")
       raise AgentRuntimeException("Unable to clean up public ips. "
                                   "Reason: {}".format(error.message))
     except ClientException as e:
-      logging.exception("ClientException received while attempting to contact "
+      logger.exception("ClientException received while attempting to contact "
                         "Azure.")
       raise AgentConfigurationException("Unable to communicate with Azure "
           "while trying to clean up public ips. Please check your cloud "
           "configuration. Reason: {}".format(e.message))
 
-    AppScaleLogger.log("Public IP Address(s) have been successfully deleted.")
+    logger.info("Public IP Address(s) have been successfully deleted.")
 
     try:
       virtual_networks = network_client.virtual_networks.list(resource_group)
@@ -1434,21 +1430,21 @@ class AzureAgent(BaseAgent):
         result = network_client.virtual_networks.delete(resource_group, network.name)
         resource_name = 'Virtual Network' + ':' + network.name
         self.sleep_until_delete_operation_done(result, resource_name,
-                                               self.MAX_SLEEP_TIME, verbose)
-        AppScaleLogger.verbose("Virtual Network {} has been successfully deleted.".
-                               format(network.name), verbose)
+                                               self.MAX_SLEEP_TIME)
+        logger.debug("Virtual Network {} has been successfully deleted.".
+                               format(network.name))
     except CloudError as error:
-      logging.exception("Unable to clean up virtual networks.")
+      logger.exception("Unable to clean up virtual networks.")
       raise AgentRuntimeException("Unable to clean up virtual networks. "
                                   "Reason: {}".format(error.message))
     except ClientException as e:
-      logging.exception("ClientException received while attempting to "
+      logger.exception("ClientException received while attempting to "
                         "contact Azure.")
       raise AgentConfigurationException("Unable to communicate with Azure "
           "while trying to clean up virtual networks. Please check your cloud "
           "configuration. Reason: {}".format(e.message))
 
-    AppScaleLogger.log("Virtual Network(s) have been successfully deleted.")
+    logger.info("Virtual Network(s) have been successfully deleted.")
 
   def get_params_from_args(self, args):
     """ Constructs a dict with only the parameters necessary to interact with
@@ -1479,7 +1475,6 @@ class AzureAgent(BaseAgent):
       self.PARAM_TAG: args[self.PARAM_TAG],
       self.PARAM_TENANT_ID: args[self.PARAM_TENANT_ID],
       self.PARAM_TEST: args[self.PARAM_TEST],
-      self.PARAM_VERBOSE : args.get('verbose', False),
       self.PARAM_ZONE : args[self.PARAM_ZONE],
       self.PARAM_AUTOSCALE_AGENT: False
     }
@@ -1521,7 +1516,7 @@ class AzureAgent(BaseAgent):
     azure_image_id = parameters[self.PARAM_IMAGE_ID]
     zone = parameters[self.PARAM_ZONE]
 
-    AppScaleLogger.log("Checking publisher image version for {}".format(
+    logger.info("Checking publisher image version for {}".format(
         azure_image_id))
     publisher, offer, sku, version = azure_image_id.split(":")
     compute_client = ComputeManagementClient(credentials, subscription_id)
@@ -1577,20 +1572,20 @@ class AzureAgent(BaseAgent):
     compute_client = ComputeManagementClient(credentials, subscription_id)
     compatible_zone = zone.lower().replace(" ", "")
 
-    AppScaleLogger.log("Using publisher image {}".format(azure_image_id))
+    logger.info("Using publisher image {}".format(azure_image_id))
 
     try:
       image = compute_client.virtual_machine_images.get(
           compatible_zone, publisher, offer, sku, version)
       if not image.plan:
-        AppScaleLogger.warn("It is not recommended to use a non-AppScale image")
+        logger.warn("It is not recommended to use a non-AppScale image")
         return
       market_place_client = MarketplaceOrderingAgreements(credentials,
                                                           subscription_id)
       term = market_place_client.marketplace_agreements.get(
           image.plan.publisher, image.plan.product, image.plan.name)
       if not term.accepted:
-        AppScaleLogger.log("Marketplace image {}'s license agreement was not "
+        logger.info("Marketplace image {}'s license agreement was not "
                            "accepted, accepting it now.".format(azure_image_id))
         term.accepted = True
         market_place_client.marketplace_agreements.create(
@@ -1610,16 +1605,15 @@ class AzureAgent(BaseAgent):
         Microsoft Azure.
     """
     params = {
-      self.PARAM_GROUP: LocalState.get_group(keyname),
+      self.PARAM_GROUP: AppScaleState.get_group(keyname),
       self.PARAM_KEYNAME: keyname,
-      self.PARAM_VERBOSE: True,
-      self.PARAM_ZONE: LocalState.get_zone(keyname),
-      self.PARAM_SUBSCRIBER_ID: LocalState.get_subscription_id(keyname),
-      self.PARAM_APP_ID: LocalState.get_app_id(keyname),
-      self.PARAM_APP_SECRET: LocalState.get_app_secret_key(keyname),
-      self.PARAM_TENANT_ID: LocalState.get_tenant_id(keyname),
-      self.PARAM_RESOURCE_GROUP: LocalState.get_resource_group(keyname),
-      self.PARAM_STORAGE_ACCOUNT: LocalState.get_storage_account(keyname),
+      self.PARAM_ZONE: AppScaleState.get_zone(keyname),
+      self.PARAM_SUBSCRIBER_ID: AppScaleState.get_subscription_id(keyname),
+      self.PARAM_APP_ID: AppScaleState.get_app_id(keyname),
+      self.PARAM_APP_SECRET: AppScaleState.get_app_secret_key(keyname),
+      self.PARAM_TENANT_ID: AppScaleState.get_tenant_id(keyname),
+      self.PARAM_RESOURCE_GROUP: AppScaleState.get_resource_group(keyname),
+      self.PARAM_STORAGE_ACCOUNT: AppScaleState.get_storage_account(keyname),
     }
     return params
 
@@ -1694,22 +1688,21 @@ class AzureAgent(BaseAgent):
     """
     group_name = parameters[self.PARAM_RESOURCE_GROUP]
     region = parameters[self.PARAM_ZONE]
-    verbose = parameters[self.PARAM_VERBOSE]
-    AppScaleLogger.verbose("Creating/Updating the Virtual Network '{}'".
-                           format(network_name), verbose)
+    logger.debug("Creating/Updating the Virtual Network '{}'".
+                           format(network_name))
     address_space = AddressSpace(address_prefixes=['10.1.0.0/16'])
     subnet1 = Subnet(name=subnet_name, address_prefix='10.1.0.0/24')
     try:
       result = network_client.virtual_networks.create_or_update(
           group_name, network_name,
           VirtualNetwork(location=region, address_space=address_space, subnets=[subnet1]))
-      self.sleep_until_update_operation_done(result, network_name, verbose)
+      self.sleep_until_update_operation_done(result, network_name)
     except CloudError as error:
-      logging.exception("Azure agent received a CloudError.")
+      logger.exception("Azure agent received a CloudError.")
       raise AgentRuntimeException("Unable to create virtual network. Reason: "
                                   "{}".format(error.message))
     except ClientException as e:
-      logging.exception("ClientException received while attempting to contact "
+      logger.exception("ClientException received while attempting to contact "
                         "Azure.")
       raise AgentConfigurationException("Unable to communicate with Azure "
         "while trying to create virtual network. Please check your cloud "
@@ -1736,22 +1729,21 @@ class AzureAgent(BaseAgent):
     """
     group_name = parameters[self.PARAM_RESOURCE_GROUP]
     region = parameters[self.PARAM_ZONE]
-    verbose = parameters[self.PARAM_VERBOSE]
-    AppScaleLogger.verbose("Creating/Updating the Public IP Address '{}'".
-                           format(ip_name), verbose)
+    logger.debug("Creating/Updating the Public IP Address '{}'".
+                           format(ip_name))
     ip_address = PublicIPAddress(
       location=region, public_ip_allocation_method=IPAllocationMethod.dynamic,
       idle_timeout_in_minutes=4)
     try:
       result = network_client.public_ip_addresses.create_or_update(
           group_name, ip_name, ip_address)
-      self.sleep_until_update_operation_done(result, ip_name, verbose)
+      self.sleep_until_update_operation_done(result, ip_name)
     except CloudError as error:
-      logging.exception("Azure agent received a CloudError.")
+      logger.exception("Azure agent received a CloudError.")
       raise AgentRuntimeException("Unable to create public ip address. "
                                   "Reason: {}".format(error.message))
     except ClientException as e:
-      logging.exception("ClientException received while attempting to contact "
+      logger.exception("ClientException received while attempting to contact "
                         "Azure.")
       raise AgentConfigurationException("Unable to communicate with Azure "
           "while trying to create a public ip address. Please check your cloud "
@@ -1759,8 +1751,8 @@ class AzureAgent(BaseAgent):
 
     public_ip_address = network_client.public_ip_addresses.get(group_name, ip_name)
 
-    AppScaleLogger.verbose("Creating/Updating the Network Interface '{}'".
-                           format(interface_name), verbose)
+    logger.debug("Creating/Updating the Network Interface '{}'".
+                           format(interface_name))
     network_interface_ip_conf = NetworkInterfaceIPConfiguration(
       name=interface_name, private_ip_allocation_method=IPAllocationMethod.dynamic,
       subnet=subnet, public_ip_address=PublicIPAddress(id=(public_ip_address.id)))
@@ -1769,19 +1761,19 @@ class AzureAgent(BaseAgent):
       result = network_client.network_interfaces.create_or_update(group_name,
         interface_name, NetworkInterface(location=region,
                                          ip_configurations=[network_interface_ip_conf]))
-      self.sleep_until_update_operation_done(result, interface_name, verbose)
+      self.sleep_until_update_operation_done(result, interface_name)
     except CloudError as error:
-      logging.exception("Azure agent received a CloudError.")
+      logger.exception("Azure agent received a CloudError.")
       raise AgentRuntimeException("Unable to create network interface. "
                                   "Reason: {}".format(error.message))
     except ClientException as e:
-      logging.exception("ClientException received while attempting to contact "
+      logger.exception("ClientException received while attempting to contact "
                         "Azure.")
       raise AgentConfigurationException("Unable to communicate with Azure "
           "while trying to create network interface. Please check your cloud "
           "configuration. Reason: {}".format(e.message))
 
-  def sleep_until_update_operation_done(self, result, resource_name, verbose):
+  def sleep_until_update_operation_done(self, result, resource_name):
     """ Sleeps until the create/update operation for the resource is completed
       successfully.
       Args:
@@ -1791,12 +1783,12 @@ class AzureAgent(BaseAgent):
     """
     time_start = time.time()
     while not result.done():
-      AppScaleLogger.verbose("Waiting {0} second(s) for {1} to be created/updated.".
-                             format(self.SLEEP_TIME, resource_name), verbose)
+      logger.debug("Waiting {0} second(s) for {1} to be created/updated.".
+                             format(self.SLEEP_TIME, resource_name))
       time.sleep(self.SLEEP_TIME)
       total_sleep_time = time.time() - time_start
       if total_sleep_time > self.MAX_SLEEP_TIME:
-        AppScaleLogger.log("Waited {0} second(s) for {1} to be created/updated. "
+        logger.info("Waited {0} second(s) for {1} to be created/updated. "
           "Operation has timed out.".format(total_sleep_time, resource_name))
         break
 
@@ -1828,7 +1820,7 @@ class AzureAgent(BaseAgent):
       # If the resource group does not already exist, create a new one with the
       # specified storage account.
       if not self.does_resource_group_exist(resource_group_name, resource_client):
-        AppScaleLogger.log("Creating a new resource group '{0}' with the tag "
+        logger.info("Creating a new resource group '{0}' with the tag "
                            "'{1}'.".format(resource_group_name, tag_name))
         resource_client.resource_groups.create_or_update(
           resource_group_name, ResourceGroup(location=parameters[self.PARAM_ZONE],
@@ -1845,17 +1837,17 @@ class AzureAgent(BaseAgent):
           acct_names.append(account.name)
 
         if parameters[self.PARAM_STORAGE_ACCOUNT] in acct_names:
-            AppScaleLogger.log("Storage account '{0}' under '{1}' resource group "
+            logger.info("Storage account '{0}' under '{1}' resource group "
               "already exists. So not creating it again.".format(
               parameters[self.PARAM_STORAGE_ACCOUNT], resource_group_name))
         else:
           self.create_storage_account(parameters, storage_client)
     except CloudError as error:
-      logging.exception("Unable to create resource group.")
+      logger.exception("Unable to create resource group.")
       raise AgentConfigurationException("Unable to create a resource group "
         "using the credentials provided: {}".format(error.message))
     except ClientException as e:
-      logging.exception("ClientException received while attempting to contact "
+      logger.exception("ClientException received while attempting to contact "
                         "Azure.")
       raise AgentConfigurationException("Unable to communicate with Azure "
           "while trying to create resource group. Please check your cloud "
@@ -1878,7 +1870,7 @@ class AzureAgent(BaseAgent):
     rg_name = parameters[self.PARAM_RESOURCE_GROUP]
 
     try:
-      AppScaleLogger.log("Creating a new storage account '{0}' under the "
+      logger.info("Creating a new storage account '{0}' under the "
         "resource group '{1}'.".format(storage_account, rg_name))
       result = storage_client.storage_accounts.create(
         rg_name, storage_account,StorageAccountCreateParameters(
@@ -1888,7 +1880,7 @@ class AzureAgent(BaseAgent):
       # wait() insures polling the underlying async operation until it's done.
       result.wait()
     except CloudError as error:
-      logging.exception("Unable to create storage account.")
+      logger.exception("Unable to create storage account.")
       raise AgentConfigurationException("Unable to create a storage account "
         "using the credentials provided: {}".format(error.message))
 
@@ -1906,3 +1898,14 @@ class AzureAgent(BaseAgent):
       if resource_group_name == resource_group.name:
         return True
     return False
+
+  def __test_logging(self):
+    logger.info("azureagent info log")
+    logger.debug("azureagent debug log")
+    logger.warn("azureagent warning log")
+    logger.error("azureagent error log")
+    logger.critical("azureagent critical log")
+    try:
+      raise KeyError()
+    except KeyError:
+      logger.exception("azureagent exception")

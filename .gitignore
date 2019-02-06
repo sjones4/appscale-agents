@@ -1,0 +1,4 @@
+*.py[c|o]
+*.swp
+.idea
+.DS_Store
