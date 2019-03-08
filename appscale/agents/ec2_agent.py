@@ -7,6 +7,7 @@ import boto.vpc
 import datetime
 import glob
 import os
+import re
 import time
 import logging
 
@@ -18,7 +19,6 @@ from .config import AppScaleState
 from base_agent import AgentConfigurationException
 from base_agent import AgentRuntimeException
 from base_agent import BaseAgent
-
 
 # pylint: disable-msg=W0511
 #    don't bother about todo's
@@ -654,15 +654,24 @@ class EC2Agent(BaseAgent):
     conn = self.open_connection(parameters)
     conn.stop_instances(instance_ids)
     logger.info('Stopping instances: '+' '.join(instance_ids))
-    if not self.wait_for_status_change(parameters, conn, 'stopped',
-           max_wait_time=120):
-      logger.info("re-stopping instances: "+' '.join(instance_ids))
-      conn.stop_instances(instance_ids)
-      if not self.wait_for_status_change(parameters, conn, 'stopped',
-            max_wait_time=120):
-        self.handle_failure("ERROR: could not stop instances: " + \
-            ' '.join(instance_ids))
 
+    status_filters = {"instance-state-name": 'stopped',
+                      "key-name": parameters[self.PARAM_KEYNAME]}
+
+    try:
+      if not self.wait_for_status_change(instance_ids, conn, status_filters,
+                                         max_wait_time=120):
+        logger.info("re-stopping instances: "+' '.join(instance_ids))
+        conn.stop_instances(instance_ids)
+        if not self.wait_for_status_change(instance_ids, conn, status_filters,
+                                           max_wait_time=120):
+          self.handle_failure("ERROR: could not stop instances: " +
+                              ' '.join(instance_ids))
+    except InstanceIDNotFound as e:
+      self.handle_failure("Error: instance ids: {} not found in cloud"
+                          .format(e.message))
+    except InvalidFilter as e:
+      self.handle_failure("Error: invalid filter - {}".format(e.message))
 
   def terminate_instances(self, parameters):
     """
@@ -673,60 +682,125 @@ class EC2Agent(BaseAgent):
     Args:
       parameters: A dictionary of parameters.
     """
-    instance_ids = parameters[self.PARAM_INSTANCE_IDS]
+    instance_ids = set(parameters[self.PARAM_INSTANCE_IDS])
     conn = self.open_connection(parameters)
-    conn.terminate_instances(instance_ids)
-    logger.info('Terminating instances: ' + ' '.join(instance_ids))
-    if not self.wait_for_status_change(parameters, conn, 'terminated',
-            max_wait_time=120):
-      logger.info("re-terminating instances: " + ' '.join(instance_ids))
-      conn.terminate_instances(instance_ids)
-      if not self.wait_for_status_change(parameters, conn, 'terminated',
-                max_wait_time=120):
-        self.handle_failure("ERROR: could not terminate instances: " + \
-            ' '.join(instance_ids))
-    # Sending a second terminate to a terminated instance to remove it
-    # from the system (ie no more in describe-instances).  This helps when
-    # bringing deployments up and down frequently and instances are still
-    # associated with keyname (although they are terminated).
+
+    if not self.__terminate_instances(parameters, conn, 2):
+      self.handle_failure("ERROR: could not terminate instances: {}"
+                          .format(" ".join(instance_ids)))
+
     logger.info("Removing terminated instances: " + ' '.join(instance_ids))
-    conn.terminate_instances(instance_ids)
+    self.__terminate_instances(parameters, conn)
 
+  def __terminate_instances(self, parameters, conn, max_attempts=1):
+    """
+    Private terminate_instances that retries boto.connection.terminate_instances():
 
-  def wait_for_status_change(self, parameters, conn, state_requested,
-                             max_wait_time=60,poll_interval=10):
-    """ After we have sent a signal to the cloud infrastructure to change the state
-      of the instances (unsually from runnning to either stoppped or
-      terminated), wait for the status to change.  If all the instances change
-      successfully, return True, if not return False.
+    Bound by max_attempts:
+        State transition failures
+    *Not bound by max_attempts:*
+        If an Instance ID is not found by EC2, retry with a subset of Ids.
+        Assumption is that the missing id is terminated/deleted.
 
     Args:
-      parameters: A dictionary of parameters.
+       parameters: A dictionary of parameters
+       conn: EC2 Connection
+       max_attempts: Number of terminate_instances() calls to attempt
+    Returns:
+       True if instances were terminated
+       False if we were unable to terminate the instances.
+    """
+    instance_ids = set(parameters[self.PARAM_INSTANCE_IDS])
+    status_filters = {"instance-state-name": 'terminated',
+                      "key-name": parameters[self.PARAM_KEYNAME]}
+
+    attempts = 0
+    while attempts < max_attempts:
+      try:
+        logger.info("Terminating instances: {} attempt: {} of {}"
+                    .format(' '.join(instance_ids), attempts, max_attempts))
+        conn.terminate_instances(instance_ids)
+        if self.wait_for_status_change(instance_ids, conn, status_filters,
+                                       max_wait_time=120):
+          return True
+        else:
+          attempts += 1
+
+      except boto.exception.EC2ResponseError as resp_error:
+        if resp_error.error_code == 'InvalidInstanceID.NotFound':
+          instance_ids.difference_update(re.findall('i-[a-zA-Z0-9]+',
+                                         resp_error.error_message))
+          logger.debug("New instance_ids: {}".format(' '.join(instance_ids)))
+          if len(instance_ids) == 0:
+            return True
+
+        # make another attempt
+        continue
+
+      except InvalidFilter as e:
+        logger.error("Invalid filter: {}".format(e.message))
+        break
+
+    # Ran out of attempts
+    return False
+
+  def wait_for_status_change(self, initial_instance_ids, conn, filters,
+                             max_wait_time=60, poll_interval=10):
+    """ After we have sent a signal to the cloud infrastructure to change the state
+      of the instances (usually from running to either stopped or
+      terminated), wait for the status to change.
+    Args:
+      initial_instance_ids: A list of instances to wait for
       conn: A connection object returned from self.open_connection().
-      state_requested: String of the requested final state of the instances.
+      filters: dictionary of ec2 filters which are used to get the desired state
       max_wait_time: int of maximum amount of time (in seconds)  to wait for the
         state change.
       poll_interval: int of the number of seconds to wait between checking of
         the state.
+    Returns:
+      True: if all instances are in the desired state
+      False: if all instances aren't in the desired state or a timeout occurred.
+    Raises:
+      InstanceIDNotFound: Raised when we cant find an instance
+                          and state != 'terminating'
     """
-    time_start = time.time()
-    instance_ids = parameters[self.PARAM_INSTANCE_IDS]
-    instances_in_state = {}
-    while True:
-      time.sleep(poll_interval)
-      reservations = conn.get_all_instances(instance_ids)
-      instances = [i for r in reservations for i in r.instances]
-      for i in instances:
-        # instance i.id reports status = i.state
-        if i.state == state_requested and \
-           i.key_name == parameters[self.PARAM_KEYNAME]:
-          if i.id not in instances_in_state.keys():
-            instances_in_state[i.id] = 1 # mark instance done
-      if len(instances_in_state.keys()) >= len(instance_ids):
-        return True
-      if time.time() - time_start > max_wait_time:
-        return False
+    # Error out if we can't determine what status to wait on
+    if 'instance-state-name' not in filters:
+      raise InvalidFilter('instance-state-name is missing from filter')
 
+    instance_ids = set(initial_instance_ids)
+
+    start_time = time.time()
+    while (time.time() - start_time) < max_wait_time:
+      time.sleep(poll_interval)
+      try:
+        reservations = conn.get_all_reservations(list(instance_ids),
+                                                 filters=filters)
+      except boto.exception.EC2ResponseError as resp_error:
+        if 'InvalidInstanceID.NotFound' == resp_error.error_code:
+
+          ids_not_found = re.findall('i-[a-zA-Z0-9]+',
+                                     resp_error.error_message)
+
+          if 'terminated' == filters['instance-state-name']:
+            # If we are waiting for 'terminated' adjust instance_ids and
+            # continue polling for status
+            instance_ids.difference_update(ids_not_found)
+
+            # No instance_ids found so they must be terminated
+            if len(instance_ids) == 0:
+              return True
+            logger.debug("Updated instance ids: {}".format(' '.join(instance_ids)))
+            continue
+          else:
+            # For all other states it is an error to not find the instance id.
+            raise InstanceIDNotFound(' '.join(ids_not_found))
+
+      # We've found instances in the desired state, lets see if we are done
+      instances_in_state = [i.id for r in reservations for i in r.instances]
+      if instance_ids.issubset(instances_in_state):
+        return True
+    return False
 
   def does_address_exist(self, parameters):
     """ Queries Amazon EC2 to see if the specified Elastic IP address has been
@@ -1045,5 +1119,13 @@ class EC2Agent(BaseAgent):
       raise KeyError()
     except KeyError:
       logger.exception("ec2agent exception")
-    
-    
+
+
+class InvalidFilter(Exception):
+  def __init__(self, msg):
+    Exception.__init__(self, msg)
+
+
+class InstanceIDNotFound(Exception):
+  def __init__(self, msg):
+    Exception.__init__(self, msg)
