@@ -770,8 +770,8 @@ class EC2Agent(BaseAgent):
 
     instance_ids = set(initial_instance_ids)
 
-    start_time = time.time()
-    while (time.time() - start_time) < max_wait_time:
+    deadline = time.time() + max_wait_time
+    while time.time() < deadline:
       time.sleep(poll_interval)
       try:
         reservations = conn.get_all_reservations(list(instance_ids),
