@@ -640,7 +640,6 @@ class EC2Agent(BaseAgent):
         'ID {1} because: {2}'.format(elastic_ip, instance_id,
         exception.error_message))
 
-
   def stop_instances(self, parameters):
     """
     Stop one of more EC2 instances. The input instance IDs are
@@ -684,15 +683,17 @@ class EC2Agent(BaseAgent):
     """
     instance_ids = set(parameters[self.PARAM_INSTANCE_IDS])
     conn = self.open_connection(parameters)
+    status_filters = {"instance-state-name": 'terminated',
+                      "key-name": parameters[self.PARAM_KEYNAME]}
 
-    if not self.__terminate_instances(parameters, conn, 2):
+    if not self.__terminate_instances(instance_ids, conn, status_filters, 2):
       self.handle_failure("ERROR: could not terminate instances: {}"
                           .format(" ".join(instance_ids)))
 
     logger.info("Removing terminated instances: " + ' '.join(instance_ids))
-    self.__terminate_instances(parameters, conn)
+    self.__terminate_instances(instance_ids, conn, status_filters)
 
-  def __terminate_instances(self, parameters, conn, max_attempts=1):
+  def __terminate_instances(self, instance_ids, conn, status_filters, max_attempts=1):
     """
     Private terminate_instances that retries boto.connection.terminate_instances():
 
@@ -703,22 +704,19 @@ class EC2Agent(BaseAgent):
         Assumption is that the missing id is terminated/deleted.
 
     Args:
-       parameters: A dictionary of parameters
+       instance_ids: Set of instance ids to terminate
        conn: EC2 Connection
+       status_filters: Dictionary of EC2 filters to use
        max_attempts: Number of terminate_instances() calls to attempt
     Returns:
        True if instances were terminated
        False if we were unable to terminate the instances.
     """
-    instance_ids = set(parameters[self.PARAM_INSTANCE_IDS])
-    status_filters = {"instance-state-name": 'terminated',
-                      "key-name": parameters[self.PARAM_KEYNAME]}
-
     attempts = 0
     while attempts < max_attempts:
       try:
-        logger.info("Terminating instances: {} attempt: {} of {}"
-                    .format(' '.join(instance_ids), attempts, max_attempts))
+        logger.debug("Terminating instances: {} attempt: {} of {}"
+                     .format(' '.join(instance_ids), attempts, max_attempts))
         conn.terminate_instances(instance_ids)
         if self.wait_for_status_change(instance_ids, conn, status_filters,
                                        max_wait_time=120):
@@ -776,6 +774,11 @@ class EC2Agent(BaseAgent):
       try:
         reservations = conn.get_all_reservations(list(instance_ids),
                                                  filters=filters)
+        # We've found instances in the desired state, lets see if we are done
+        instances_in_state = [i.id for r in reservations for i in r.instances]
+        if instance_ids.issubset(instances_in_state):
+          return True
+
       except boto.exception.EC2ResponseError as resp_error:
         if 'InvalidInstanceID.NotFound' == resp_error.error_code:
 
@@ -795,11 +798,6 @@ class EC2Agent(BaseAgent):
           else:
             # For all other states it is an error to not find the instance id.
             raise InstanceIDNotFound(' '.join(ids_not_found))
-
-      # We've found instances in the desired state, lets see if we are done
-      instances_in_state = [i.id for r in reservations for i in r.instances]
-      if instance_ids.issubset(instances_in_state):
-        return True
     return False
 
   def does_address_exist(self, parameters):
