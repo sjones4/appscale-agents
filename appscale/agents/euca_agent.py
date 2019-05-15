@@ -81,8 +81,8 @@ class EucalyptusAgent(EC2Agent):
     conn = self.open_connection(parameters)
     zone = parameters[self.PARAM_ZONE]
     if conn.get_all_zones(zone):
-      logger.log('Availability zone {0} does exist'.format(zone))
+      logger.debug('Availability zone {0} does exist'.format(zone))
       return True
     else:
-      logger.log('Availability zone {0} does not exist'.format(zone))
+      logger.debug('Availability zone {0} does not exist'.format(zone))
       return False
