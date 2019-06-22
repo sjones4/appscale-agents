@@ -717,7 +717,7 @@ class EC2Agent(BaseAgent):
       try:
         logger.debug("Terminating instances: {} attempt: {} of {}"
                      .format(' '.join(instance_ids), attempts, max_attempts))
-        conn.terminate_instances(instance_ids)
+        conn.terminate_instances(list(instance_ids))
         if self.wait_for_status_change(instance_ids, conn, status_filters,
                                        max_wait_time=120):
           return True
