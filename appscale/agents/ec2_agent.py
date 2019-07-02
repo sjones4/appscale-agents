@@ -697,11 +697,8 @@ class EC2Agent(BaseAgent):
     """
     Private terminate_instances that retries boto.connection.terminate_instances():
 
-    Bound by max_attempts:
-        State transition failures
-    *Not bound by max_attempts:*
-        If an Instance ID is not found by EC2, retry with a subset of Ids.
-        Assumption is that the missing id is terminated/deleted.
+    If an Instance ID is not found by EC2, retry with a subset of Ids.
+    Assumption is that the missing id is terminated/deleted.
 
     Args:
        instance_ids: Set of instance ids to terminate
@@ -714,6 +711,7 @@ class EC2Agent(BaseAgent):
     """
     attempts = 0
     while attempts < max_attempts:
+      attempts += 1
       try:
         logger.debug("Terminating instances: {} attempt: {} of {}"
                      .format(' '.join(instance_ids), attempts, max_attempts))
@@ -721,16 +719,24 @@ class EC2Agent(BaseAgent):
         if self.wait_for_status_change(instance_ids, conn, status_filters,
                                        max_wait_time=120):
           return True
-        else:
-          attempts += 1
-
       except boto.exception.EC2ResponseError as resp_error:
         if resp_error.error_code == 'InvalidInstanceID.NotFound':
+          num_ids = len(instance_ids)
           instance_ids.difference_update(re.findall('i-[a-zA-Z0-9]+',
                                          resp_error.error_message))
           logger.debug("New instance_ids: {}".format(' '.join(instance_ids)))
+          new_num_ids = len(instance_ids)
+
           if len(instance_ids) == 0:
             return True
+
+          # If the set size has decreased, then retry without incrementing
+          # attempts
+          if new_num_ids < num_ids:
+            attempts-=1
+        else:
+          # If we got another EC2 error, wait a bit and then retry
+          time.sleep(self.SLEEP_TIME)
 
         # make another attempt
         continue
