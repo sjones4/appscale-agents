@@ -231,7 +231,7 @@ class AzureAgent(BaseAgent):
       raise AgentRuntimeException("SSH key already found locally - please "
                                   "use a different keyname.")
 
-    AppScaleState.generate_rsa_key(keyname, parameters[self.PARAM_VERBOSE])
+    AppScaleState.generate_rsa_key(keyname)
 
     logger.info("Configuring network for machine/s under "
                        "resource group '{0}' with storage account '{1}' "
