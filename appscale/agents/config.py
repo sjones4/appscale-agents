@@ -81,7 +81,7 @@ class AppScaleState(object):
         return os.path.join(cls.config_path(), "locations-{0}.yaml".format(keyname))
 
     @classmethod
-    def generate_rsa_key(cls, keyname, is_verbose):
+    def generate_rsa_key(cls, keyname, is_verbose=False):
         """Generates a new RSA public and private keypair, and saves it to the
         local filesystem.
         
