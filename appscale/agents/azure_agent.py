@@ -985,10 +985,12 @@ class AzureAgent(BaseAgent):
           "while trying to create Scale Set. Please check your cloud "
           "configuration. Reason: {}".format(e.message))
 
-  def associate_static_ip(self, instance_id, static_ip):
+  def associate_static_ip(self, parameters, instance_id, static_ip):
     """ Associates the given static IP address with the given instance ID.
 
     Args:
+      parameters: A dict, containing all the parameters necessary to
+        authenticate this user with Azure.
       instance_id: A str that names the instance that the static IP should be
         bound to.
       static_ip: A str naming the static IP to bind to the given instance.

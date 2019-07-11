@@ -106,10 +106,12 @@ class BaseAgent(object):
     raise NotImplementedError
 
 
-  def associate_static_ip(self, instance_id, static_ip):
+  def associate_static_ip(self, parameters, instance_id, static_ip):
     """Associates the given static IP address with the given instance ID.
 
     Args:
+      parameters: A dict containing values necessary to authenticate with the
+        underlying cloud.
       instance_id: A str that names the instance that the static IP should be
         bound to.
       static_ip: A str naming the static IP to bind to the given instance.
