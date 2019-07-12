@@ -6,8 +6,8 @@ import boto.ec2
 import boto.vpc
 import datetime
 import glob
-import os
 import time
+import uuid
 import logging
 
 from boto.ec2.networkinterface import NetworkInterfaceCollection
@@ -446,19 +446,37 @@ class EC2Agent(BaseAgent):
       A tuple of the form (public_ips, private_ips, instances) where each
       member is a list.
     """
+    filter_states = ['running']
+    if pending:
+        filter_states.append('pending')
+    filters = {
+        'instance-state-name': filter_states,
+        'key-name': [parameters[self.PARAM_KEYNAME]]
+    }
+    return self._describe_instances(parameters, filters)
+
+  def _describe_instances(self, parameters, filters):
+    """
+    Describe instances using a filter.
+
+    Args:
+      parameters: A dictionary with connection parameters.
+      filters: Filters to use with the describe instances call.
+    Returns:
+      A tuple of the form (public_ips, private_ips, instances) where each
+      member is a list.
+    """
     instance_ids = []
     public_ips = []
     private_ips = []
 
     conn = self.open_connection(parameters)
-    reservations = conn.get_all_instances()
+    reservations = conn.get_all_instances(filters=filters)
     instances = [i for r in reservations for i in r.instances]
     for i in instances:
-      if (i.state == 'running' or (pending and i.state == 'pending'))\
-           and i.key_name == parameters[self.PARAM_KEYNAME]:
-        instance_ids.append(i.id)
-        public_ips.append(i.ip_address or i.private_ip_address)
-        private_ips.append(i.private_ip_address)
+      instance_ids.append(i.id)
+      public_ips.append(i.ip_address or i.private_ip_address)
+      private_ips.append(i.private_ip_address)
     return public_ips, private_ips, instance_ids
 
   def run_instances(self, count, parameters, security_configured, public_ip_needed):
@@ -502,10 +520,10 @@ class EC2Agent(BaseAgent):
       logger.info("Using on-demand instances")
 
     start_time = datetime.datetime.now()
-    active_public_ips = []
-    active_private_ips = []
-    active_instances = []
-
+    filters = {
+        'instance-state-name': ['running'],
+        'key-name': [parameters[self.PARAM_KEYNAME]]
+    }
     # Make sure we do not have terminated instances using the same keyname.
     instances = self.__describe_instances(parameters)
     term_instance_info = self.__get_instance_info(instances,
@@ -520,15 +538,12 @@ class EC2Agent(BaseAgent):
     try:
       attempts = 1
       while True:
-        instance_info = self.describe_instances(parameters)
-        active_public_ips = instance_info[0]
-        active_private_ips = instance_info[1]
-        active_instances = instance_info[2]
+        running_instances = self._describe_instances(parameters, filters)[2]
 
         # If security has been configured on this agent just now,
         # that's an indication that this is a fresh cloud deployment.
         # As such it's not expected to have any running VMs.
-        if len(active_instances) > 0 or security_configured:
+        if len(running_instances) > 0 or security_configured:
           break
         elif attempts == self.DESCRIBE_INSTANCES_RETRY_COUNT:
           self.handle_failure('Failed to invoke describe_instances')
@@ -562,15 +577,19 @@ class EC2Agent(BaseAgent):
         price = parameters[self.PARAM_SPOT_PRICE] or \
           self.get_optimal_spot_price(conn, instance_type, zone)
 
-        conn.request_spot_instances(str(price), image_id, key_name=keyname,
-                                    instance_type=instance_type, count=count,
-                                    placement=zone, security_groups=groups,
-                                    network_interfaces=network_interfaces)
+        spot_resp = \
+          conn.request_spot_instances(str(price), image_id, key_name=keyname,
+                                      instance_type=instance_type, count=count,
+                                      placement=zone, security_groups=groups,
+                                      network_interfaces=network_interfaces)
+        filters['spot-instance-request-id'] = [spot_resp[0].id]
       else:
+        client_token = str(uuid.uuid4())
         conn.run_instances(image_id, count, count, key_name=keyname,
                            instance_type=instance_type, placement=zone,
-                           security_groups=groups,
+                           security_groups=groups, client_token=client_token,
                            network_interfaces=network_interfaces)
+        filters['client-token'] = [client_token]
 
       instance_ids = []
       public_ips = []
@@ -580,17 +599,14 @@ class EC2Agent(BaseAgent):
 
       while datetime.datetime.now() < end_time:
         logger.info("Waiting for your instances to start...")
-        public_ips, private_ips, instance_ids = self.describe_instances(
-          parameters)
+        public_ips, private_ips, instance_ids = self._describe_instances(
+          parameters, filters)
 
         # If we need a public ip, make sure we actually get one.
         if public_ip_needed and not self.diff(public_ips, private_ips):
           time.sleep(self.SLEEP_TIME)
           continue
 
-        public_ips = self.diff(public_ips, active_public_ips)
-        private_ips = self.diff(private_ips, active_private_ips)
-        instance_ids = self.diff(instance_ids, active_instances)
         if count == len(public_ips):
           break
         time.sleep(self.SLEEP_TIME)
@@ -600,11 +616,12 @@ class EC2Agent(BaseAgent):
                             'within the time limit')
 
       if len(public_ips) != count:
-        for index in range(0, len(public_ips)):
-          if public_ips[index] == '0.0.0.0':
+        for index, public_ip in enumerate(public_ips):
+          if (public_ip == '0.0.0.0' or
+              public_ip == private_ips[index]):
             instance_to_term = instance_ids[index]
-            logger.info('Instance {0} failed to get a public IP address'\
-                    'and is being terminated'.format(instance_to_term))
+            logger.info('Instance {0} failed to get a public IP address '
+                        'and is being terminated'.format(instance_to_term))
             conn.terminate_instances([instance_to_term])
 
       end_time = datetime.datetime.now()
