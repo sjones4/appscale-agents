@@ -1250,6 +1250,17 @@ class GCEAgent(BaseAgent):
             response['error']['errors']])
           raise AgentRuntimeException(str(message))
 
+  def handle_failure(self, msg):
+    """ Log the specified error message and raise an AgentRuntimeException
+
+    Args:
+      msg: An error message to be logged and included in the raised exception.
+    Raises:
+      AgentRuntimeException Contains the input error message.
+    """
+    logger.info(msg)
+    raise AgentRuntimeException(msg)
+
   def __test_logging(self):
     logger.info("gceagent info log")
     logger.debug("gceagent debug log")
