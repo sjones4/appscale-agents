@@ -751,7 +751,7 @@ class GCEAgent(BaseAgent):
     #                                                from Canonical
     # family/ubuntu-1604-lts -> use image family from project_id passed to this method.
     #
-    if '/' in image_id and not image_id.startsiwth('family'):
+    if '/' in image_id and not image_id.startswith('family'):
       image_project_id, real_image_id = image_id.split('/', 1)
     else:
       image_project_id = project_id
