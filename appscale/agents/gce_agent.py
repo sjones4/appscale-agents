@@ -745,10 +745,10 @@ class GCEAgent(BaseAgent):
     #
     # Examples:
     # ubuntu-1604-lts -> uses image from project_id passed to this method
-    # ubuntu-os-cloud/ubuntu-1604-lts -> uses latest family image from
-    #                                    Canonical (ubuntu-os-cloud)
+    # ubuntu-os-cloud/family/ubuntu-1604-lts -> uses latest family image from
+    #                                           Canonical (ubuntu-os-cloud)
     # ubuntu-os-cloud/ubuntu-1604-xenial-20190628 -> uses specific ubuntu image
-    #                                    from Canonical
+    #                                                from Canonical
     #
     if '/' in image_id:
       image_project_id, real_image_id = image_id.split('/', 1)
