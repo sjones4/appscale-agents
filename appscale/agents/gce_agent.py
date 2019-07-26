@@ -749,8 +749,9 @@ class GCEAgent(BaseAgent):
     #                                           Canonical (ubuntu-os-cloud)
     # ubuntu-os-cloud/ubuntu-1604-xenial-20190628 -> uses specific ubuntu image
     #                                                from Canonical
+    # family/ubuntu-1604-lts -> use image family from project_id passed to this method.
     #
-    if '/' in image_id:
+    if '/' in image_id and not image_id.startsiwth('family'):
       image_project_id, real_image_id = image_id.split('/', 1)
     else:
       image_project_id = project_id
