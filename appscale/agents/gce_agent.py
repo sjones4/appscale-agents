@@ -737,8 +737,28 @@ class GCEAgent(BaseAgent):
       self.describe_instances(parameters)
 
     # Construct URLs
-    image_url = '{0}{1}/global/images/{2}'.format(self.GCE_URL, project_id,
-      image_id)
+
+    # This overloads the image_id string so we don't have to introduce
+    # yet another environment variable. This allows the user to specify
+    # A project name along with the image to use an image defined by someone
+    # else
+    #
+    # Examples:
+    # ubuntu-1604-lts -> uses image from project_id passed to this method
+    # ubuntu-os-cloud/ubuntu-1604-lts -> uses latest family image from
+    #                                    Canonical (ubuntu-os-cloud)
+    # ubuntu-os-cloud/ubuntu-1604-xenial-20190628 -> uses specific ubuntu image
+    #                                    from Canonical
+    #
+    if '/' in image_id:
+      image_project_id, real_image_id = image_id.split('/', 1)
+    else:
+      image_project_id = project_id
+      real_image_id = image_id
+
+    image_url = '{0}{1}/global/images/{2}'.format(self.GCE_URL,
+                                                  image_project_id,
+                                                  real_image_id)
     project_url = '{0}{1}'.format(self.GCE_URL, project_id)
     machine_type_url = '{0}/zones/{1}/machineTypes/{2}'.format(project_url,
       zone, instance_type)
