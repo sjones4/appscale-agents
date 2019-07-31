@@ -886,6 +886,8 @@ class EC2Agent(BaseAgent):
       mount_point = '/dev/xvdc'
     elif glob.glob("/dev/vd*"):
       mount_point = '/dev/vdc'
+    elif glob.glob('/dev/nvme*'):
+      mount_point = '/dev/nvme1n1'
     else:
       mount_point = '/dev/sdc'
 
