@@ -686,8 +686,8 @@ class GCEAgent(BaseAgent):
     disk_name = self.generate_disk_name(parameters)
     project_url = '{0}{1}'.format(self.GCE_URL,
       parameters[self.PARAM_PROJECT])
-    source_image_url = '{0}{1}/global/images/{2}'.format(self.GCE_URL,
-      parameters[self.PARAM_PROJECT], parameters[self.PARAM_IMAGE_ID])
+    source_image_url = self.get_image_url(parameters[self.PARAM_PROJECT],
+                                          parameters[self.PARAM_IMAGE_ID])
     request = gce_service.disks().insert(
       project=parameters[self.PARAM_PROJECT],
       zone=parameters[self.PARAM_ZONE],
@@ -704,6 +704,42 @@ class GCEAgent(BaseAgent):
     disk_url = "{0}/zones/{1}/disks/{2}".format(
       project_url, parameters[self.PARAM_ZONE], disk_name)
     return disk_url
+
+  def get_image_url(self, project_id, image_id):
+    """
+    Construct a google URL for the image_id
+
+    The image_id can have various forms which determine what project_id is used
+
+    project_id / image_id used as is:
+     - If the image_id is a string with no path separators
+     - If the image_id startswith 'family/'
+
+    project_id / image_id is manipulated:
+     - If the image_id is a string with a path separator
+     - Image_id does not start with 'family/'
+     - Project_id is constructed from the first part of the 'path', the rest
+       is the image id.
+
+    Examples:
+    ubuntu-1604-lts -> uses image from project_id passed to this method
+    family/ubuntu-1604-lts -> use image family from project_id passed to this method.
+
+    ubuntu-os-cloud/family/ubuntu-1604-lts -> uses latest family image from
+                                              Canonical project (ubuntu-os-cloud)
+    ubuntu-os-cloud/ubuntu-1604-xenial-20190628 -> uses specific ubuntu image
+                                                   from Canonical project
+    """
+    if '/' in image_id and not image_id.startswith('family/'):
+      image_project_id, real_image_id = image_id.split('/', 1)
+    else:
+      image_project_id = project_id
+      real_image_id = image_id
+
+    image_url = '{0}{1}/global/images/{2}'.format(self.GCE_URL,
+                                                  image_project_id,
+                                                  real_image_id)
+    return image_url
 
   def run_instances(self, count, parameters, security_configured, public_ip_needed):
     """ Starts 'count' instances in Google Compute Engine, and returns once they
@@ -737,8 +773,7 @@ class GCEAgent(BaseAgent):
       self.describe_instances(parameters)
 
     # Construct URLs
-    image_url = '{0}{1}/global/images/{2}'.format(self.GCE_URL, project_id,
-      image_id)
+    image_url = self.get_image_url(project_id, image_id)
     project_url = '{0}{1}'.format(self.GCE_URL, project_id)
     machine_type_url = '{0}/zones/{1}/machineTypes/{2}'.format(project_url,
       zone, instance_type)
