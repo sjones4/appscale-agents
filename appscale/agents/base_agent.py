@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 import logging
+import random
+import string
 
 logger = logging.getLogger(__name__)
 
@@ -260,6 +262,18 @@ class BaseAgent(object):
       if item not in list2:
         diffed_list.append(item)
     return diffed_list
+
+  @staticmethod
+  def _gen_machine_id(length=8):
+    """
+    Generates an ID that's meant to be unique for a machine within a
+    deployment.
+
+    Returns:
+      A string specifying a machine ID.
+    """
+    return ''.join(random.choice(string.lowercase + string.digits)
+                   for _ in range(length))
 
   def __test_logging(self):
     """ Output a couple of messages at different logging levels"""
