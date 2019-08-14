@@ -69,7 +69,6 @@ from azure.mgmt.storage.models import Sku as StorageSku
 from msrestazure.azure_active_directory import ServicePrincipalCredentials
 from msrest.exceptions import ClientException
 from msrestazure.azure_exceptions import CloudError
-from haikunator import Haikunator
 
 # AppScale-specific imports
 from .config import AppScaleState
@@ -557,7 +556,9 @@ class AzureAgent(BaseAgent):
       availability_set: An Availability Set instance for the load balancer VMs.
     """
     resource_group = parameters[self.PARAM_RESOURCE_GROUP]
-    vm_network_name = Haikunator().haikunate()
+    # Azure machines get a smaller hostname because they get assigned an
+    # unreasonably long DNS suffix (51 characters).
+    vm_network_name = self._gen_machine_id(6)
     self.create_network_interface(network_client, vm_network_name,
                                   vm_network_name, subnet, parameters)
     network_interface = network_client.network_interfaces.get(
@@ -793,7 +794,9 @@ class AzureAgent(BaseAgent):
         AgentConfigurationException: If the operation to create a virtual
         machine scale set did not succeed.
     """
-    random_resource_name = Haikunator().haikunate()
+    # Azure machines get a smaller hostname because they get assigned an
+    # unreasonably long DNS suffix (51 characters).
+    random_resource_name = self._gen_machine_id(6)
 
     num_instances_to_add = count
 

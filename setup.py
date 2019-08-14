@@ -49,7 +49,6 @@ setup(
     'argparse',
     'boto',
     'google-api-python-client==1.5.4',
-    'haikunator',
     'httplib2',
     'msrestazure==0.4.34',
     'oauth2client==4.0.0',

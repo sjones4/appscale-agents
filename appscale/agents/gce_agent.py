@@ -785,7 +785,7 @@ class GCEAgent(BaseAgent):
       instances = {
         # Truncate the name down to the first 62 characters, since GCE doesn't
         # let us use arbitrarily long instance names.
-        'name': '{group}-{uuid}'.format(group=group, uuid=uuid.uuid4())[:62],
+        'name': '-'.join([group, self._gen_machine_id()])[:62],
         'machineType': machine_type_url,
         'disks':[{
           'source': disk_url,
