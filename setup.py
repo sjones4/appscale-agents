@@ -50,6 +50,8 @@ setup(
     'boto',
     'google-api-python-client==1.5.4',
     'httplib2',
+    'keyring>=12.0.2,<19.0.0',
+    'keyrings.alt>=3.1,<3.2',
     'msrestazure==0.4.34',
     'oauth2client==4.0.0',
     'PyYAML',
