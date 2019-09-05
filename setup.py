@@ -13,7 +13,7 @@ except ImportError:
 
 
 long_description = """AppScale Agents 
---------------
+---------------
 
 A set of agents for interacting with various clouds 
 
@@ -37,7 +37,7 @@ setup(
   description='A set of agents for interacting with various clouds',
   long_description=long_description,
   author='AppScale Systems, Inc.',
-  url='https://github.com/scragraham/appscale-agents',
+  url='https://github.com/appscale/appscale-agents',
   license='Apache License 2.0',
   keywords='appscale google-app-engine python java go php',
   platforms='Posix; MacOS X',
