@@ -69,7 +69,6 @@ from azure.mgmt.storage.models import Sku as StorageSku
 from msrestazure.azure_active_directory import ServicePrincipalCredentials
 from msrest.exceptions import ClientException
 from msrestazure.azure_exceptions import CloudError
-from haikunator import Haikunator
 
 # AppScale-specific imports
 from .config import AppScaleState
@@ -557,7 +556,9 @@ class AzureAgent(BaseAgent):
       availability_set: An Availability Set instance for the load balancer VMs.
     """
     resource_group = parameters[self.PARAM_RESOURCE_GROUP]
-    vm_network_name = Haikunator().haikunate()
+    # Azure machines get a smaller hostname because they get assigned an
+    # unreasonably long DNS suffix (51 characters).
+    vm_network_name = self._gen_machine_id(6)
     self.create_network_interface(network_client, vm_network_name,
                                   vm_network_name, subnet, parameters)
     network_interface = network_client.network_interfaces.get(
@@ -793,7 +794,9 @@ class AzureAgent(BaseAgent):
         AgentConfigurationException: If the operation to create a virtual
         machine scale set did not succeed.
     """
-    random_resource_name = Haikunator().haikunate()
+    # Azure machines get a smaller hostname because they get assigned an
+    # unreasonably long DNS suffix (51 characters).
+    random_resource_name = self._gen_machine_id(6)
 
     num_instances_to_add = count
 
@@ -985,10 +988,12 @@ class AzureAgent(BaseAgent):
           "while trying to create Scale Set. Please check your cloud "
           "configuration. Reason: {}".format(e.message))
 
-  def associate_static_ip(self, instance_id, static_ip):
+  def associate_static_ip(self, parameters, instance_id, static_ip):
     """ Associates the given static IP address with the given instance ID.
 
     Args:
+      parameters: A dict, containing all the parameters necessary to
+        authenticate this user with Azure.
       instance_id: A str that names the instance that the static IP should be
         bound to.
       static_ip: A str naming the static IP to bind to the given instance.

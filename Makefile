@@ -10,7 +10,11 @@ all: help
 
 ##@ Testing
 
-test: checkenv-VIRTUAL_ENV ## Run Python Unit tests 
+test: checkenv-VIRTUAL_ENV ## Run Python Unit Tests 
+	@pip install flexmock
+	@python -m unittest discover -b -s test
+
+test-verbose: checkenv-VIRTUAL_ENV ## Run Python Unit Tests - Verbose
 	@pip install flexmock
 	@python -m unittest discover -b -v -s test
 

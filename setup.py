@@ -13,7 +13,7 @@ except ImportError:
 
 
 long_description = """AppScale Agents 
---------------
+---------------
 
 A set of agents for interacting with various clouds 
 
@@ -33,11 +33,11 @@ http://www.appscale.com
 
 setup(
   name='appscale-agents',
-  version='3.6.1',
+  version='3.8.0',
   description='A set of agents for interacting with various clouds',
   long_description=long_description,
   author='AppScale Systems, Inc.',
-  url='https://github.com/scragraham/appscale-agents',
+  url='https://github.com/appscale/appscale-agents',
   license='Apache License 2.0',
   keywords='appscale google-app-engine python java go php',
   platforms='Posix; MacOS X',
@@ -49,8 +49,9 @@ setup(
     'argparse',
     'boto',
     'google-api-python-client==1.5.4',
-    'haikunator',
     'httplib2',
+    'keyring>=12.0.2,<19.0.0',
+    'keyrings.alt>=3.1,<3.2',
     'msrestazure==0.4.34',
     'oauth2client==4.0.0',
     'PyYAML',

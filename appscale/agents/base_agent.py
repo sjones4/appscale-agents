@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 import logging
+import random
+import string
 
 logger = logging.getLogger(__name__)
 
@@ -106,10 +108,12 @@ class BaseAgent(object):
     raise NotImplementedError
 
 
-  def associate_static_ip(self, instance_id, static_ip):
+  def associate_static_ip(self, parameters, instance_id, static_ip):
     """Associates the given static IP address with the given instance ID.
 
     Args:
+      parameters: A dict containing values necessary to authenticate with the
+        underlying cloud.
       instance_id: A str that names the instance that the static IP should be
         bound to.
       static_ip: A str naming the static IP to bind to the given instance.
@@ -258,6 +262,18 @@ class BaseAgent(object):
       if item not in list2:
         diffed_list.append(item)
     return diffed_list
+
+  @staticmethod
+  def _gen_machine_id(length=8):
+    """
+    Generates an ID that's meant to be unique for a machine within a
+    deployment.
+
+    Returns:
+      A string specifying a machine ID.
+    """
+    return ''.join(random.choice(string.lowercase + string.digits)
+                   for _ in range(length))
 
   def __test_logging(self):
     """ Output a couple of messages at different logging levels"""
