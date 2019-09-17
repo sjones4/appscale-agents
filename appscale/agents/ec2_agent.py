@@ -15,9 +15,9 @@ from boto.ec2.networkinterface import NetworkInterfaceSpecification
 from boto.exception import EC2ResponseError
 
 from .config import AppScaleState
-from base_agent import AgentConfigurationException
-from base_agent import AgentRuntimeException
-from base_agent import BaseAgent
+from .base_agent import AgentConfigurationException
+from .base_agent import AgentRuntimeException
+from .base_agent import BaseAgent
 
 # pylint: disable-msg=W0511
 #    don't bother about todo's

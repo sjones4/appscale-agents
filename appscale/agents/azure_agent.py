@@ -12,7 +12,13 @@ import math
 import os.path
 import re
 import time
-from itertools import count, ifilter
+from itertools import count
+try:
+    # Python 2
+    from future_builtins import filter
+except ImportError:
+    # Python 3
+    pass
 
 # Azure specific imports
 from azure.mgmt.compute import ComputeManagementClient
@@ -73,9 +79,9 @@ from msrestazure.azure_exceptions import CloudError
 # AppScale-specific imports
 from .config import AppScaleState
 
-from base_agent import AgentConfigurationException
-from base_agent import AgentRuntimeException
-from base_agent import BaseAgent
+from .base_agent import AgentConfigurationException
+from .base_agent import AgentRuntimeException
+from .base_agent import BaseAgent
 
 logger = logging.getLogger(__name__)
 
@@ -287,7 +293,7 @@ class AzureAgent(BaseAgent):
       existing_luns.add(disk.lun)
 
     # Get the first number not being used as a LUN.
-    the_chosen_lun = next(ifilter(lambda lun: lun not in existing_luns, count(1)))
+    the_chosen_lun = next(filter(lambda lun: lun not in existing_luns, count(1)))
 
     disk = compute_client.disks.get(resource_group, disk_name)
     managed_disk_params = ManagedDiskParameters(id=disk.id)

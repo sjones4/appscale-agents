@@ -3,13 +3,13 @@ import struct
 from appscale.agents.agent_exceptions import UnknownInfrastructureException
 
 try:
-    from azure_agent import AzureAgent
+    from .azure_agent import AzureAgent
 except (ImportError, struct.error):
     AzureAgent = None
-from ec2_agent import EC2Agent
-from euca_agent import EucalyptusAgent
-from gce_agent import GCEAgent
-from openstack_agent import OpenStackAgent
+from .ec2_agent import EC2Agent
+from .euca_agent import EucalyptusAgent
+from .gce_agent import GCEAgent
+from .openstack_agent import OpenStackAgent
 
 __author__ = 'hiranya'
 __email__ = 'hiranya@appscale.com'

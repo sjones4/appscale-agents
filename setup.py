@@ -58,10 +58,8 @@ setup(
     'requests[security]>=2.20.0',
     'retrying==1.3.3',
     'setuptools>=11.3,<34',
-    'SOAPpy',
     'tabulate==0.7.7',
-    'termcolor',
-    'wstools==0.4.3'
+    'termcolor'
   ],
   extras_require={'testing': ['mock']},
   classifiers=[
@@ -70,8 +68,8 @@ setup(
     'Intended Audience :: Developers',
     'Intended Audience :: System Administrators',
     'License :: OSI Approved :: Apache Software License',
-    'Programming Language :: Python :: 2.6',
     'Programming Language :: Python :: 2.7',
+    'Programming Language :: Python :: 3',
     'Topic :: Utilities'
   ],
   namespace_packages=['appscale'],

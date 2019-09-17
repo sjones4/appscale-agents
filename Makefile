@@ -29,6 +29,7 @@ install: checkenv-VIRTUAL_ENV ## Install via pip, ensuring a virtualenv
 
 install-no-venv: ## Install via pip without ensuring a virtualenv
 	@pip install .
+	@pip3 install .
 
 ##@ Build (for PyPi)
 

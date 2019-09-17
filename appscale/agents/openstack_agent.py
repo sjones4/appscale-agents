@@ -1,9 +1,13 @@
 """ The Openstack Agent. """
 import boto
 import time
+import sys
 
-from ec2_agent import EC2Agent
-from urlparse import urlparse
+from .ec2_agent import EC2Agent
+if sys.version_info[0] < 3:
+  from urlparse import urlparse
+else:
+  from urllib import parse as urlparse
 
 __author__ = 'dario nascimento'
 __email__ = 'dario.nascimento@tecnico.ulisboa.pt'
