@@ -1,15 +1,4 @@
-import sys
-
 from setuptools import setup
-
-# Require users to uninstall versions that used the appscale namespace.
-try:
-  import appscale.appscale_tools
-  print('Please run "pip uninstall appscale-tools" first.\n'
-        "Your installed version conflicts with this version's namespace.")
-  sys.exit()
-except ImportError:
-  pass
 
 
 long_description = """AppScale Agents 
@@ -45,8 +34,7 @@ setup(
     'adal>=0.4.7',
     'azure==2.0.0',
     'azure-mgmt-marketplaceordering',
-    'cryptography',
-    'argparse',
+    'cryptography>=2.3.0',
     'boto',
     'google-api-python-client==1.5.4',
     'httplib2',
@@ -56,12 +44,7 @@ setup(
     'oauth2client==4.0.0',
     'PyYAML',
     'requests[security]>=2.20.0',
-    'retrying==1.3.3',
-    'setuptools>=11.3,<34',
-    'SOAPpy',
-    'tabulate==0.7.7',
-    'termcolor',
-    'wstools==0.4.3'
+    'setuptools>=11.3,<34'
   ],
   extras_require={'testing': ['mock']},
   classifiers=[
