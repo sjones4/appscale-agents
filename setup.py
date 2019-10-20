@@ -33,7 +33,7 @@ http://www.appscale.com
 
 setup(
   name='appscale-agents',
-  version='3.8.0',
+  version='3.8.1',
   description='A set of agents for interacting with various clouds',
   long_description=long_description,
   author='AppScale Systems, Inc.',
