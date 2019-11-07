@@ -7,6 +7,7 @@ try:
 except (ImportError, struct.error):
     AzureAgent = None
 from ec2_agent import EC2Agent
+from ec2_autoscaling_agent import EC2AutoScalingAgent
 from euca_agent import EucalyptusAgent
 from gce_agent import GCEAgent
 from openstack_agent import OpenStackAgent
@@ -21,12 +22,13 @@ class InfrastructureAgentFactory:
 
     # A set containing each of the cloud infrastructures that AppScale can
     # deploy over.
-    VALID_AGENTS = ('ec2', 'euca', 'gce', 'openstack', 'azure')
+    VALID_AGENTS = ('ec2', 'ec2-autoscaling', 'euca', 'gce', 'openstack', 'azure')
 
     # A dict that maps each VALID_AGENT above to the class that implements
     # support for it in AppScale.
     agents = {
         'ec2': EC2Agent,
+        'ec2-autoscaling': EC2AutoScalingAgent,
         'euca': EucalyptusAgent,
         'gce': GCEAgent,
         'openstack': OpenStackAgent,
