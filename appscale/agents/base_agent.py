@@ -35,6 +35,33 @@ class BaseAgent(object):
   OPERATION_TERMINATE = 'terminate'
 
 
+  # The following constants are string literals that can be used by callers to
+  # test which features are applicable for an agent
+
+  # Persistent disks should not be included in the layout. When flag present
+  # disk configuration is automatically handled and any checks should be
+  # skipped.
+  FLAG_DISK_AUTO = 'DISK_AUTO'
+
+  # Instance types are not required in the layout. When flag present
+  # instance types are automatically handled and any checks should be
+  # skipped.
+  FLAG_INSTANCE_TYPE_AUTO = 'INSTANCE_TYPE_AUTO'
+
+  # SSH key and security group are handled automatically and should not be
+  # added to the AppScalefile
+  FLAG_KEY_AUTO = 'KEY_AUTO'
+
+  # SSH will be automatically configured and tools should not attempt to
+  # configure keys for SSH access to hosts.
+  FLAG_SSH_AUTO = 'SSH_AUTO'
+
+
+  def get_flags(self):
+    """Get the feature flags for this agent"""
+    return ()
+
+
   def assert_credentials_are_valid(self, parameters):
     """Checks with the given cloud to ensure that the given credentials can be
     used to interact with it.
