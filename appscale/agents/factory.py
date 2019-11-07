@@ -36,6 +36,13 @@ class InfrastructureAgentFactory:
         agents['azure'] = AzureAgent
 
     @classmethod
+    def agent_has_flag(cls, infrastructure, flag):
+        try:
+            return flag in cls.create_agent(infrastructure).get_flags()
+        except UnknownInfrastructureException:
+            return False
+
+    @classmethod
     def create_agent(cls, infrastructure):
         """
         Instantiate a new infrastructure agent.
