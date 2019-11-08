@@ -35,6 +35,11 @@ class EC2AutoScalingAgent(BaseAgent):
     BaseAgent.PARAM_INSTANCE_IDS,
   )
 
+  def get_flags(self):
+      """Get the feature flags for this agent"""
+      return (BaseAgent.FLAG_DISK_AUTO, BaseAgent.FLAG_INSTANCE_TYPE_AUTO,
+              BaseAgent.FLAG_KEY_AUTO, BaseAgent.FLAG_SSH_AUTO)
+
   def assert_credentials_are_valid(self, parameters):
     """Contacts AWS to verify credentials.
 
