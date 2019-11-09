@@ -354,15 +354,26 @@ class EC2AutoScalingAgent(BaseAgent):
     for autoscaling_group in groups_response.get('AutoScalingGroups', []):
       if autoscaling_group_name != autoscaling_group.get('AutoScalingGroupName'):
         continue
+      current_desired_capacity = autoscaling_group.get('DesiredCapacity', 0)
       desired_capacity = 0
 
       for autoscaling_instance in autoscaling_group.get('Instances', []):
         if autoscaling_instance.get('ProtectedFromScaleIn', True):
           desired_capacity = desired_capacity + 1
 
-      autoscaling.set_desired_capacity(
-        AutoScalingGroupName=autoscaling_group_name,
-        DesiredCapacity=desired_capacity)
+      if current_desired_capacity == desired_capacity:
+        break
+
+      for attempt in range(3):
+        if attempt > 0:
+          time.sleep(5)
+        try:
+          autoscaling.set_desired_capacity(
+              AutoScalingGroupName=autoscaling_group_name,
+              DesiredCapacity=desired_capacity)
+          break
+        except autoscaling.exceptions.ScalingActivityInProgressFault:
+          pass
 
     if terminated_instance_ids:
       ec2 = self.ec2_client()
