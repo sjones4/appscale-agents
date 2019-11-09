@@ -25,6 +25,7 @@ class EC2AutoScalingAgent(BaseAgent):
   """
 
   PARAM_AUTOSCALING_GROUP_NAME = 'aws_autoscaling_group'
+  PARAM_INSTANCE_FILTER = 'aws_instance_filter'
 
   REQUIRED_EC2_RUN_INSTANCES_PARAMS = (
       PARAM_AUTOSCALING_GROUP_NAME,
@@ -88,6 +89,13 @@ class EC2AutoScalingAgent(BaseAgent):
       raise AgentConfigurationException('AutoScaling group name required.')
     params[self.PARAM_AUTOSCALING_GROUP_NAME] = autoscaling_group_name
 
+    ec2_instance_filter = args.get(self.PARAM_INSTANCE_FILTER)
+    if ec2_instance_filter:
+      params[self.PARAM_INSTANCE_FILTER] = ec2_instance_filter
+    else:
+      params[self.PARAM_INSTANCE_FILTER] = (
+          'tag:aws:autoscaling:groupName={}'.format(autoscaling_group_name))
+
     self.assert_credentials_are_valid(params)
 
     return params
@@ -102,12 +110,21 @@ class EC2AutoScalingAgent(BaseAgent):
         AppScale deployment.
     """
     autoscaling_group_name = AppScaleState.get_infrastructure_option(
-        tag="aws_autoscaling_group", keyname=keyname)
+        tag=self.PARAM_AUTOSCALING_GROUP_NAME, keyname=keyname)
 
     if not autoscaling_group_name:
       raise AgentConfigurationException('AutoScaling group name equired.')
+    params = {self.PARAM_AUTOSCALING_GROUP_NAME : autoscaling_group_name}
 
-    return {self.PARAM_AUTOSCALING_GROUP_NAME : autoscaling_group_name}
+    ec2_instance_filter = AppScaleState.get_infrastructure_option(
+        tag=self.PARAM_INSTANCE_FILTER, keyname=keyname)
+    if ec2_instance_filter:
+      params[self.PARAM_INSTANCE_FILTER] = ec2_instance_filter
+    else:
+      params[self.PARAM_INSTANCE_FILTER] = (
+          'tag:aws:autoscaling:groupName={}'.format(autoscaling_group_name))
+
+    return params
 
   def assert_required_parameters(self, parameters, operation):
     """
@@ -135,14 +152,14 @@ class EC2AutoScalingAgent(BaseAgent):
     this agent.
 
     Args:
-      parameters: A dictionary containing a 'aws_autoscaling_group'
-        parameter.
+      parameters: A dictionary containing optional parameters for instance
+        filtering.
       pending: Indicates we also want the pending instances.
     Returns:
       A tuple of the form (public_ips, private_ips, instances) where each
       member is a list.
     """
-    autoscaling_group_name = parameters.get(self.PARAM_AUTOSCALING_GROUP_NAME)
+    ec2_instance_filter = parameters.get(self.PARAM_INSTANCE_FILTER)
     instance_ids = parameters.get(BaseAgent.PARAM_INSTANCE_IDS)
 
     states = ['running']
@@ -161,11 +178,15 @@ class EC2AutoScalingAgent(BaseAgent):
         'Name': 'instance-id',
         'Values': instance_ids
       })
-    if autoscaling_group_name:
-      filters.append({
-        'Name': 'aws:autoscaling:groupName',
-        'Values': [autoscaling_group_name]
-      })
+    if ec2_instance_filter:
+      try:
+        filter_key, filter_value = ec2_instance_filter.split('=', 2)
+        filters.append({
+          'Name': filter_key,
+          'Values': [filter_value]
+        })
+      except ValueError:
+        pass
     describe_response = ec2.describe_instances(Filters=filters)
     reservations = describe_response.get('Reservations', [])
     instances = [i for r in reservations for i in r.get('Instances', [])]
@@ -262,7 +283,7 @@ class EC2AutoScalingAgent(BaseAgent):
       ec2 = self.ec2_client()
       ec2_waiter = ec2.get_waiter('instance_running')
       ec2_waiter.wait(Filters=[{
-          'Name': 'aws:autoscaling:groupName',
+          'Name': 'tag:aws:autoscaling:groupName',
           'Values': [autoscaling_group_name]
       }])
 
