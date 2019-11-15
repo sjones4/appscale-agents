@@ -48,6 +48,7 @@ setup(
     'cryptography',
     'argparse',
     'boto',
+    'boto3',
     'google-api-python-client==1.5.4',
     'httplib2',
     'keyring>=12.0.2,<19.0.0',
