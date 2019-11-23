@@ -49,6 +49,7 @@ setup(
     'argparse',
     'boto',
     'boto3',
+    'python-dateutil>=2.1,<2.8.1',
     'google-api-python-client==1.5.4',
     'httplib2',
     'keyring>=12.0.2,<19.0.0',
