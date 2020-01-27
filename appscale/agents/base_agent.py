@@ -304,7 +304,7 @@ class BaseAgent(object):
 
   def __test_logging(self):
     """ Output a couple of messages at different logging levels"""
-    print "LOGGER: %s" % logger.name
+    print("LOGGER: %s" % logger.name)
     logger.info("baseagent info log")
     logger.debug("baseagent debug log")
     logger.warn("baseagent warning log")

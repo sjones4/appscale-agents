@@ -1,8 +1,12 @@
 import boto
 import logging
+import sys
 
-from ec2_agent import EC2Agent
-from urlparse import urlparse
+from .ec2_agent import EC2Agent
+if sys.version_info[0] < 3:
+  from urlparse import urlparse
+else:
+  from urllib import parse as urlparse
 
 logger = logging.getLogger(__name__)
 

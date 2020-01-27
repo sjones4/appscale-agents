@@ -31,9 +31,9 @@ import oauth2client.tools
 # AppScale-specific imports
 from .config import AppScaleState
 
-from base_agent import AgentConfigurationException
-from base_agent import AgentRuntimeException
-from base_agent import BaseAgent
+from .base_agent import AgentConfigurationException
+from .base_agent import AgentRuntimeException
+from .base_agent import BaseAgent
 
 logger = logging.getLogger(__name__)
 
